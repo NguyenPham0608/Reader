@@ -1,0 +1,57 @@
+{
+  "app.js": {
+    "mtime": 1794701808.5037956,
+    "ast_hash": "c42a8d3e4cce24dacdbd0a2ebb46b3e3",
+    "semantic_hash": ""
+  },
+  "serve.py": {
+    "mtime": 1794701199.6751912,
+    "ast_hash": "120fa643483af320b793715ccb2da55b",
+    "semantic_hash": ""
+  },
+  "tts-worker.js": {
+    "mtime": 1794701595.6251152,
+    "ast_hash": "4f018d16f9d7f312323d48702a555999",
+    "semantic_hash": ""
+  },
+  "vendor/kokoro/kokoro.web.js": {
+    "mtime": 1794700978.462236,
+    "ast_hash": "b9bdb701c3efe6651c9370c71cc6c735",
+    "semantic_hash": ""
+  },
+  "vendor/ort/ort-wasm-simd-threaded.jsep.mjs": {
+    "mtime": 1794700978.6859226,
+    "ast_hash": "6f8ef5f89a9b90dd632e632794c373c0",
+    "semantic_hash": ""
+  },
+  "vendor/pdfjs/pdf.min.mjs": {
+    "mtime": 1794700978.368526,
+    "ast_hash": "8df1d94c83ec2a6e666b0e4d9991f9bd",
+    "semantic_hash": ""
+  },
+  "vendor/pdfjs/pdf.worker.min.mjs": {
+    "mtime": 1794700978.3699331,
+    "ast_hash": "325ba9b3c159262e1571b9958b7ba211",
+    "semantic_hash": ""
+  },
+  "vendor/pdfjs/wasm/jbig2_nowasm_fallback.js": {
+    "mtime": 1794700978.4517488,
+    "ast_hash": "802ec05c40f0ae9f581cdc997360bf00",
+    "semantic_hash": ""
+  },
+  "vendor/pdfjs/wasm/openjpeg_nowasm_fallback.js": {
+    "mtime": 1794700978.452212,
+    "ast_hash": "84ca6760c86796cea2e10588dfe1c93a",
+    "semantic_hash": ""
+  },
+  "vendor/pdfjs/wasm/quickjs-eval.js": {
+    "mtime": 1794700978.4538817,
+    "ast_hash": "09b2ab789dafda562b60dca31b2f3711",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1794701595.6838229,
+    "ast_hash": "d28ad9bc9f4ef3bd7a0d45caf77a48cf",
+    "semantic_hash": ""
+  }
+}
