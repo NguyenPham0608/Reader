@@ -13,7 +13,8 @@ const els = {
   prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
-  caption: $('caption'), captionBody: $('captionBody'),
+  chat: $('chat'), chatLog: $('chatLog'), chatForm: $('chatForm'), chatInput: $('chatInput'),
+  chatExplain: $('chatExplain'), chatClose: $('chatClose'),
   keyDialog: $('keyDialog'), keyForm: $('keyForm'), keyInput: $('keyInput'), keyErr: $('keyErr'), keySave: $('keySave'),
 };
 
@@ -30,6 +31,8 @@ settings.zoom = Math.min(3, Math.max(0.5, Number(settings.zoom) || 1));
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
 
 // ── Text analysis: PDF text items → lines → paragraphs → sentences ──────────
+// Lines come from the PDF. Which lines form a paragraph is Claude's call (see `narration`),
+// with a guess from the page geometry standing in until its answer arrives.
 
 const mul = (a, b) => [
   a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
@@ -55,11 +58,18 @@ function finishLine(line) {
       : g.base < line.base - 0.1 * line.size ? 1
       : g.base > line.base + 0.06 * line.size ? -1 : 0;
   }
+  // The line as text, with ^{...} and _{...} around super- and subscripts: what Claude is shown.
+  let text = '', prev = null;
+  for (const g of line.glyphs) {
+    if (prev && !/\s$/.test(text) && !/^\s/.test(g.str) && (g.spaced || g.x0 - prev.x1 > 0.15 * line.size)) text += ' ';
+    text += g.shift > 0 ? `^{${g.str}}` : g.shift < 0 ? `_{${g.str}}` : g.str;
+    prev = g;
+  }
+  line.text = text.replace(/\}\^\{|\}_\{/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/** Group a page's text items into paragraph-like blocks. Coordinates are page units, y down. */
-function detectBlocks(items, vt) {
-  // 1. Items → lines, following the PDF's own reading order.
+/** A page's text items → its lines of text, in the PDF's own order. Coordinates are page units, y down. */
+function extractLines(items, vt) {
   const lines = [];
   let line = null;
   let spaced = false;
@@ -90,8 +100,16 @@ function detectBlocks(items, vt) {
     if (size > line.size * 1.05) { line.size = size; line.base = g.base; }
   }
   lines.forEach(finishLine);
+  lines.forEach((ln, i) => { ln.id = i; });
+  return lines;
+}
 
-  // 2. Typical line spacing per font size, so a paragraph gap can be told from a line gap.
+/**
+ * Guess which lines make up each paragraph from spacing, size and indentation. This is the
+ * stand-in until Claude has looked at the page (and the only grouping when Claude is off).
+ */
+function guessGroups(lines) {
+  // Typical line spacing per font size, so a paragraph gap can be told from a line gap.
   const tally = new Map();
   for (let i = 1; i < lines.length; i++) {
     const a = lines[i - 1], b = lines[i], dy = b.base - a.base;
@@ -110,7 +128,6 @@ function detectBlocks(items, vt) {
     leading.set(k, Math.min(...[...t].filter(([, n]) => n >= floor).map(([d]) => d)));
   }
 
-  // 3. Lines → blocks.
   const fits = (b, ln) => {
     const last = b.lines[b.lines.length - 1];
     const dy = ln.base - last.base;
@@ -144,39 +161,41 @@ function detectBlocks(items, vt) {
     }
   }
 
-  // 4. Assemble each block's text, remembering where every piece sits on the page.
-  const blocks = [];
-  for (const grp of groups) {
-    let text = '';
-    const spans = [];
-    grp.lines.forEach((ln, li) => {
-      if (li > 0) {
-        const first = ln.glyphs[0].str.trimStart();
-        if (/\p{L}[-­‐]$/u.test(text) && /^\p{Ll}/u.test(first)) {
-          text = text.slice(0, -1); // word hyphenated across the line break
-          const lastSpan = spans[spans.length - 1];
-          lastSpan.end = Math.max(lastSpan.start, text.length);
-        } else if (!/\s$/.test(text)) {
-          text += ' ';
-        }
+  return groups.map((g) => g.lines);
+}
+
+/** Join lines into one block: its text, and where every piece of that text sits on the page. */
+function buildBlock(lines) {
+  let text = '';
+  const spans = [];
+  lines.forEach((ln, li) => {
+    if (li > 0) {
+      const first = ln.glyphs[0].str.trimStart();
+      if (/\p{L}[-­‐]$/u.test(text) && /^\p{Ll}/u.test(first)) {
+        text = text.slice(0, -1); // word hyphenated across the line break
+        const lastSpan = spans[spans.length - 1];
+        lastSpan.end = Math.max(lastSpan.start, text.length);
+      } else if (!/\s$/.test(text)) {
+        text += ' ';
       }
-      let prev = null;
-      for (const g of ln.glyphs) {
-        if (prev && !/\s$/.test(text) && !/^\s/.test(g.str) && (g.spaced || g.x0 - prev.x1 > 0.15 * ln.size)) text += ' ';
-        const start = text.length;
-        text += g.str;
-        spans.push({ start, end: text.length, x0: g.x0, x1: g.x1, line: ln, shift: g.shift });
-        prev = g;
-      }
-    });
-    if ((text.match(/\p{L}/gu) || []).length < 2) continue;
-    blocks.push({
-      text, spans, size: grp.size, x0: grp.x0, x1: grp.x1,
-      top: Math.min(...grp.lines.map((l) => l.top)),
-      bottom: Math.max(...grp.lines.map((l) => l.bottom)),
-    });
-  }
-  return blocks;
+    }
+    let prev = null;
+    for (const g of ln.glyphs) {
+      if (prev && !/\s$/.test(text) && !/^\s/.test(g.str) && (g.spaced || g.x0 - prev.x1 > 0.15 * ln.size)) text += ' ';
+      const start = text.length;
+      text += g.str;
+      spans.push({ start, end: text.length, x0: g.x0, x1: g.x1, line: ln, shift: g.shift });
+      prev = g;
+    }
+  });
+  if ((text.match(/\p{L}/gu) || []).length < 2) return null;
+  // The block's type size is that of the line carrying most of its text (not a stray formula fragment).
+  const main = lines.reduce((a, b) => (b.text.length > a.text.length ? b : a));
+  return {
+    text, spans, size: main.size,
+    x0: Math.min(...lines.map((l) => l.x0)), x1: Math.max(...lines.map((l) => l.x1)),
+    top: Math.min(...lines.map((l) => l.top)), bottom: Math.max(...lines.map((l) => l.bottom)),
+  };
 }
 
 function cleanForSpeech(s) {
@@ -385,7 +404,8 @@ function makePage(n, w, h) {
   blocksEl.className = 'layer';
   el.append(canvas, hl, blocksEl);
   return {
-    n, el, canvas, svg, blocksEl, w, h, vt: null, proxyP: null, blocksP: null, blocks: null,
+    n, el, canvas, svg, blocksEl, w, h, vt: null, proxyP: null, blocksP: null, blocks: null, lines: null,
+    layout: 'none', layoutPending: null, // who grouped the lines into paragraphs: none | guess | claude
     near: false, scale: 0, target: 0, renderTask: null,
     ai: 'none', aiPromise: null, aiDone: null, // Claude's preparation of this page: none | pending | ready | error
   };
@@ -444,37 +464,80 @@ function releasePage(p) {
   }
 }
 
-function ensureBlocks(p) {
-  return p.blocksP ??= (async () => {
+/** Make a page's clickable paragraphs from groups of its lines: [{ lines, kind }] in reading order. */
+function setBlocks(p, groups) {
+  const blocks = [];
+  for (const g of groups) {
+    const b = buildBlock(g.lines);
+    if (!b) continue;
+    b.page = p;
+    b.index = blocks.length;
+    b.kind = g.kind || '';
+    b.skip = g.kind === 'skip'; // a page number, running header, label inside a figure…: passed over when reading on
+    const el = b.el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'blk';
+    el.setAttribute('aria-label', 'Read aloud: ' + b.text.slice(0, 90));
+    const padX = Math.max(3, b.size * 0.5), padY = Math.max(1.5, b.size * 0.26);
+    place(el, b.x0 - padX, b.top - padY, b.x1 + padX, b.bottom + padY, p);
+    blockOf.set(el, b);
+    blocks.push(b);
+  }
+  p.blocksEl.replaceChildren(...blocks.map((b) => b.el));
+  p.blocks = blocks;
+}
+
+/** Replace a page's guessed paragraphs with Claude's: { blocks: [{ kind, lines: [line id] }] }. */
+function applyLayout(p, layout) {
+  const used = new Set(), groups = [];
+  for (const { kind, lines } of layout.blocks) {
+    const mine = lines.map((id) => p.lines[id]).filter((ln) => ln && !used.has(ln));
+    mine.forEach((ln) => used.add(ln));
+    if (mine.length) groups.push({ kind, lines: mine });
+  }
+  if (!groups.length) return;
+  // Lines Claude left out keep the grouping the app guessed, slotted in after the line before them.
+  const left = p.lines.filter((ln) => !used.has(ln));
+  for (const lines of left.length ? guessGroups(left) : []) {
+    const at = groups.findIndex((g) => g.lines.some((ln) => ln.id === lines[0].id - 1));
+    groups.splice(at + 1, 0, { lines });
+  }
+  setBlocks(p, groups);
+  p.layout = 'claude';
+}
+
+/** A page's paragraphs, read from the PDF on first use. They may be regrouped later: use `p.blocks` afresh after any wait. */
+async function ensureBlocks(p) {
+  await (p.blocksP ??= (async () => {
     try {
       const proxy = await getProxy(p);
       const content = await proxy.getTextContent();
-      const blocks = detectBlocks(content.items, p.vt);
-      blocks.forEach((b, i) => {
-        b.page = p;
-        b.index = i;
-        b.skip = false; // set when Claude says this is a page number, running header, etc.
-        const el = b.el = document.createElement('button');
-        el.type = 'button';
-        el.className = 'blk';
-        el.setAttribute('aria-label', 'Read aloud: ' + b.text.slice(0, 90));
-        const padX = Math.max(3, b.size * 0.5), padY = Math.max(1.5, b.size * 0.26);
-        place(el, b.x0 - padX, b.top - padY, b.x1 + padX, b.bottom + padY, p);
-        blockOf.set(el, b);
-      });
-      p.blocksEl.replaceChildren(...blocks.map((b) => b.el));
-      return p.blocks = blocks;
+      p.lines = extractLines(content.items, p.vt);
+      setBlocks(p, guessGroups(p.lines).map((lines) => ({ lines })));
+      p.layout = 'guess';
     } catch (e) {
       console.warn('Could not read text on page', p.n, e);
-      return p.blocks = [];
+      p.lines = [];
+      p.blocks = [];
     }
-  })();
+  })());
+  return p.blocks;
+}
+
+/** Whether someone is listening to, or asking about, a paragraph on this page right now. */
+function inUse(p) {
+  const s = speaker.session;
+  if (chat.block?.page === p) return true;
+  return !!s && (speaker.active?.page === p || s.lastBlock.page === p || s.segs.some((x) => x.block.page === p));
 }
 
 async function adjacentBlock(block, dir) {
   let p = block.page, i = block.index + dir;
   while (p) {
-    const blocks = await ensureBlocks(p);
+    await ensureBlocks(p);
+    // Claude may still be regrouping another page's paragraphs: let that finish before picking one of them.
+    if (p !== block.page && usingClaude()) await narration.request(p);
+    const blocks = p.blocks;
     if (i === -2) i = blocks.length - 1;
     for (; i >= 0 && i < blocks.length; i += dir) if (chunkBlock(blocks[i]).length) return blocks[i];
     p = view.pages[p.n - 1 + dir];
@@ -586,6 +649,7 @@ function closeDoc() {
   view.task?.destroy();
   view.task = null;
   narration.reset();
+  chat.close();
   ai.close();
   els.pages.replaceChildren();
 }
@@ -593,7 +657,7 @@ function closeDoc() {
 function showWelcome() {
   closeDoc();
   els.welcome.hidden = false;
-  els.bar.hidden = els.pages.hidden = els.player.hidden = els.caption.hidden = true;
+  els.bar.hidden = els.pages.hidden = els.player.hidden = els.chat.hidden = true;
   document.title = 'Reader';
 }
 
@@ -688,7 +752,10 @@ async function startClaude() {
   }
 }
 
-/** Claude's pass over each page: which sentences need different words when spoken, and what to skip. */
+/**
+ * Claude's pass over each page: first which lines make up each paragraph, then which sentences
+ * need different words when spoken and what to skip.
+ */
 const narration = {
   queue: [],
   running: 0,
@@ -753,14 +820,43 @@ const narration = {
         p.aiDone();
         this.drain();
         renderPlayer();
+        this.relayout();
       });
+    }
+  },
+
+  /**
+   * Swap in paragraphs Claude worked out while their page was being listened to, now that it
+   * isn't. Called whenever that may have changed: listening stopped or moved on, a page finished.
+   */
+  relayout() {
+    for (const p of view.pages) {
+      if (!p.layoutPending || p.ai === 'pending' || inUse(p)) continue;
+      applyLayout(p, p.layoutPending);
+      p.layoutPending = null;
+      p.ai = 'none';
+      p.aiPromise = null; // the new paragraphs need their own wording
+      if (p.near) this.request(p);
     }
   },
 
   async prepare(p) {
     const token = view.token;
     try {
-      const blocks = await ensureBlocks(p);
+      await ensureBlocks(p);
+      if (p.layout === 'guess' && p.lines.length) {
+        const layout = await ai.layout(p.n, p.lines.map((ln) => ({
+          id: ln.id, x: Math.round(ln.x0), y: Math.round(ln.base), size: Math.round(ln.size * 10) / 10, text: ln.text.slice(0, 200),
+        }))).catch((e) => {
+          if (e.code !== 'not_found') throw e; // a server from before this existed: carry on with the guess
+          p.layout = 'unavailable';
+          return null;
+        });
+        if (token !== view.token) return;
+        // Paragraphs can't change under someone listening to them: keep Claude's for when they've moved on.
+        if (layout && inUse(p)) p.layoutPending = layout; else if (layout) applyLayout(p, layout);
+      }
+      const blocks = p.blocks;
       const pieces = [];
       for (const b of blocks) {
         chunkBlock(b).forEach((c, i) => pieces.push({ id: `${b.index}.${i}`, text: markedText(b, c.start, c.end) }));
@@ -907,8 +1003,6 @@ const voice = {
 const segsFor = (block) => chunkBlock(block).map((chunk) => ({ block, chunk, gap: 0 }));
 const spoken = (chunk) => (!chunk.explain && settings.ai && chunk.aiSay) || chunk.say;
 const BUFFER_AHEAD = 25;   // seconds of audio to keep ready beyond the playhead
-const EXPLAIN_AHEAD = 10;  // when explaining continuously, how far ahead to ask Claude for the next one
-const EXPLAIN_MIN = 80;    // headings and captions aren't worth explaining on their own
 
 /** Where the first sentence in a growing piece of text ends, or 0 if it hasn't yet. */
 function sentenceEnd(buf) {
@@ -931,13 +1025,17 @@ const speaker = {
     if (this.ctx.state !== 'running') this.ctx.resume();
   },
 
-  /** Begin a session on a block, either reading it ('read') or having Claude explain it ('explain'). */
-  start(block, mode) {
+  /**
+   * Begin a session on a block, either reading it ('read') or speaking Claude's reply to a turn
+   * of the chat about it ('explain').
+   */
+  start(block, mode, turn = null) {
     this.halt();
     this.ensureCtx();
     const s = this.session = {
-      id: ++this.seq, mode, segs: [], next: 0, sched: [], nextTime: 0, cur: -1,
-      busy: false, paused: false, extending: false, exhausted: false, streaming: false, streamBlock: null,
+      id: ++this.seq, mode, turn, segs: [], next: 0, sched: [], nextTime: 0, cur: -1,
+      // A reply is a one-off: it never carries on to the next paragraph.
+      busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
       lastBlock: block, waitPage: null,
       // A double-click starts as a single click; holding audio back briefly lets it change its mind unheard.
       notBefore: this.ctx.currentTime + 0.25,
@@ -945,7 +1043,7 @@ const speaker = {
     };
     setActive(block, null, false, mode);
     if (mode === 'explain') {
-      this.streamExplanation(s, block, 0);
+      this.streamReply(s, block);
     } else {
       s.segs = segsFor(block);
       narration.request(block.page, true);
@@ -959,13 +1057,13 @@ const speaker = {
     if (chunkBlock(block).length) this.start(block, 'read');
   },
 
-  async explain(block) {
-    if (!ai.available) {
-      if (ai.reason === 'no_key') openKeyDialog(); else toast(ai.offMessage, 6000);
-      return;
-    }
-    this.start(block, 'explain');
+  /** Whether Claude can be asked about a paragraph; if not, says why. */
+  canExplain() {
+    if (ai.available) return true;
+    if (ai.reason === 'no_key') openKeyDialog(); else toast(ai.offMessage, 6000);
+    return false;
   },
+
 
   /** A click on the paragraph being spoken pauses or resumes it; on any other one, reads it. */
   toggleBlock(block) {
@@ -973,11 +1071,6 @@ const speaker = {
     else this.speak(block);
   },
 
-  /** A double-click asks Claude to explain a paragraph; on the one being explained, it stops. */
-  toggleExplain(block) {
-    if (this.session?.mode === 'explain' && this.active === block && this.session.cur >= 0) this.stop();
-    else this.explain(block);
-  },
 
   toggle() {
     const s = this.session;
@@ -992,31 +1085,32 @@ const speaker = {
   },
 
   async skip(dir) {
-    const from = this.active, mode = this.session?.mode || 'read';
+    const from = this.active;
     if (!from) return;
-    const b = await nextReadable(from, dir, mode === 'explain' ? EXPLAIN_MIN : 0);
-    if (b && this.active === from) { this.start(b, mode); reveal(b); }
+    const b = await nextReadable(from, dir);
+    if (b && this.active === from) { this.start(b, 'read'); reveal(b); } // from a reply, this goes back to reading
   },
 
-  /** Collect Claude's explanation as it streams in, handing each finished sentence to the voice. */
-  async streamExplanation(s, block, gap) {
+  /** Collect Claude's reply to a chat turn as it streams in, handing each finished sentence to the voice. */
+  async streamReply(s, block) {
     s.streaming = true;
     s.streamBlock = block;
-    const signal = s.aiAbort.signal;
-    let buf = '', count = 0;
+    const signal = s.aiAbort.signal, turn = s.turn;
+    let buf = '';
     const emit = (text) => {
       const say = cleanForSpeech(text);
       if (!/[\p{L}\p{N}]/u.test(say)) return;
-      s.segs.push({ block, chunk: { say, raw: text.trim(), explain: true }, gap: count ? 0 : gap });
-      count++;
-      renderCaption();
+      const chunk = { say, raw: text.trim(), explain: true };
+      turn.chunks.push(chunk);
+      s.segs.push({ block, chunk, gap: 0 });
+      chat.render();
       this.pump();
     };
     try {
       if (!(await startClaude())) throw ai.doc?.error || new AiError('api');
       const near = block.page.blocks || [];
       await ai.explain({
-        page: block.page.n, text: block.text, signal,
+        page: block.page.n, text: block.text, question: turn.question, history: chat.before(turn), signal,
         before: near[block.index - 1]?.text.slice(-500) || '',
         after: near[block.index + 1]?.text.slice(0, 500) || '',
         onText: (delta) => {
@@ -1024,14 +1118,14 @@ const speaker = {
           for (let cut; (cut = sentenceEnd(buf)) > 0; buf = buf.slice(cut)) emit(buf.slice(0, cut));
         },
       });
-      if (this.session === s && !signal.aborted && buf.trim()) emit(buf);
+      if (!signal.aborted && buf.trim()) emit(buf);
     } catch (e) {
-      if (this.session !== s || signal.aborted) return;
-      toast(e.message || 'Claude could not explain that.');
+      if (!signal.aborted) turn.error = e.message || 'Claude could not answer that.';
     }
+    turn.done = true; // even when cut short: what arrived stays in the conversation
+    chat.render();
     if (this.session !== s || signal.aborted) return;
     s.streaming = false;
-    if (!count) s.exhausted = true; // nothing came back: let the session wind down
     renderPlayer();
     this.pump();
   },
@@ -1043,7 +1137,7 @@ const speaker = {
     const ahead = s.sched.length ? s.nextTime - this.ctx.currentTime : 0;
     if (s.next >= s.segs.length) {
       if (s.streaming || s.extending || s.exhausted || !settings.keepReading) return;
-      if (ahead > (s.mode === 'explain' ? EXPLAIN_AHEAD : BUFFER_AHEAD)) return;
+      if (ahead > BUFFER_AHEAD) return;
       this.extend(s);
       return;
     }
@@ -1087,19 +1181,15 @@ const speaker = {
 
   async extend(s) {
     s.extending = true;
-    const b = await nextReadable(s.lastBlock, 1, s.mode === 'explain' ? EXPLAIN_MIN : 0).catch(() => null);
+    const b = await nextReadable(s.lastBlock, 1).catch(() => null);
     if (this.session !== s) return;
     s.extending = false;
     if (!b) { s.exhausted = true; return; }
     s.lastBlock = b;
-    if (s.mode === 'explain') {
-      this.streamExplanation(s, b, 0.5);
-    } else {
-      const segs = segsFor(b);
-      segs[0].gap = 0.35; // a breath between paragraphs
-      s.segs.push(...segs);
-      this.pump();
-    }
+    const segs = segsFor(b);
+    segs[0].gap = 0.35; // a breath between paragraphs
+    s.segs.push(...segs);
+    this.pump();
   },
 
   onAudio(s, idx, { pcm, rate }) {
@@ -1226,6 +1316,7 @@ const speaker = {
     this.halt();
     setActive(null, null);
     renderPlayer();
+    narration.relayout();
   },
 };
 
@@ -1238,6 +1329,7 @@ function setActive(block, chunk, auto = false, mode = 'read') {
     prev?.el.classList.remove('active', 'pending', 'explain');
     speaker.active = block;
     if (block && auto) reveal(block);
+    if (prev && block && prev.page !== block.page) narration.relayout();
   }
   if (block) {
     block.el.classList.add('active');
@@ -1281,10 +1373,10 @@ function renderPlayer() {
       : s.waitPage ? 'Claude is preparing this passage…'
       : 'Starting…';
     const page = (seg ? seg.block : speaker.active ?? s.lastBlock).page.n;
-    sub = `${explaining ? 'Explaining · ' : ''}Page ${page}${s.paused ? ' · Paused' : ''}`;
+    sub = `${explaining ? (s.turn.question ? 'Answering · ' : 'Explaining · ') : ''}Page ${page}${s.paused ? ' · Paused' : ''}`;
   } else {
     text = loading ? preparing : 'Click a paragraph to listen';
-    sub = loading ? 'The first run downloads about 65 MB, once.' : 'Double-click one and Claude explains it';
+    sub = loading ? 'The first run downloads about 65 MB, once.' : 'Double-click one to ask Claude about it';
   }
   els.nowText.textContent = text;
   els.nowSub.textContent = sub;
@@ -1303,37 +1395,7 @@ function renderPlayer() {
       : voice.state === 'ready' ? 'Voice ready'
       : voice.state === 'error' ? 'The voice couldn’t load yet — it will retry when you start reading.' : '';
   }
-  renderCaption();
-}
-
-/** The explanation's words, since unlike reading there is nothing on the page to follow. */
-function renderCaption() {
-  const s = speaker.session;
-  const show = s?.mode === 'explain' && !!view.doc;
-  els.caption.hidden = !show;
-  if (!show) return;
-  const block = s.cur >= 0 ? s.sched[s.cur].seg.block : speaker.active;
-  const current = s.cur >= 0 ? s.sched[s.cur].seg : null;
-  const segs = s.segs.filter((x) => x.block === block && x.chunk.explain);
-  const key = `${s.id}|${block?.page.n}.${block?.index}|${segs.length}|${segs.indexOf(current)}`;
-  if (els.captionBody.dataset.key === key) return;
-  els.captionBody.dataset.key = key;
-  if (!segs.length) {
-    const wait = document.createElement('span');
-    wait.textContent = 'Thinking about this paragraph…';
-    els.captionBody.replaceChildren(wait);
-    return;
-  }
-  const at = segs.indexOf(current);
-  let nowEl = null;
-  els.captionBody.replaceChildren(...segs.flatMap((seg, i) => {
-    const span = document.createElement('span');
-    span.textContent = seg.chunk.raw;
-    if (at >= 0 && i < at) span.className = 'said';
-    if (i === at) { span.className = 'now'; nowEl = span; }
-    return [span, ' '];
-  }));
-  if (nowEl) els.caption.scrollTop = Math.max(0, nowEl.offsetTop - 44);
+  chat.render();
 }
 
 function renderChip() {
@@ -1395,6 +1457,110 @@ function markVoice() {
   }
 }
 
+// ── Chatting with Claude about a paragraph ──────────────────────────────────
+
+/**
+ * The bar above the player that a double-click opens: a conversation with Claude about one
+ * paragraph. Each turn is a question (empty for "explain this") and Claude's reply, which is
+ * spoken as it arrives; earlier turns go back to Claude with every new question.
+ */
+const chat = {
+  block: null,
+  turns: [], // [{ question, chunks: [the reply's sentences], done, error }]
+  shown: '',
+
+  /** Open the bar on a paragraph, starting a new conversation unless it is already about that one. */
+  open(block) {
+    if (this.block !== block) {
+      this.close();
+      this.block = block;
+      block.el.classList.add('chosen');
+      els.chatInput.value = '';
+    }
+    els.chat.hidden = false;
+    this.render();
+    els.chatInput.focus({ preventScroll: true });
+  },
+
+  close() {
+    if (!this.block) return;
+    if (speaker.session?.mode === 'explain') speaker.stop();
+    this.block.el.classList.remove('chosen');
+    this.block = null;
+    this.turns = [];
+    els.chat.hidden = true;
+    narration.relayout();
+  },
+
+  /** Put a question to Claude; an empty one asks it to explain the paragraph. */
+  send(question) {
+    question = question.trim().replace(/\s+/g, ' ');
+    if (!this.block || (!question && this.turns.length) || !speaker.canExplain()) return;
+    const turn = { question, chunks: [], done: false, error: '' };
+    this.turns.push(turn);
+    els.chatInput.value = '';
+    speaker.start(this.block, 'explain', turn);
+    this.render();
+  },
+
+  /** The conversation up to a turn, as Claude needs it. */
+  before(turn) {
+    return this.turns.slice(0, this.turns.indexOf(turn))
+      .map((t) => ({ question: t.question, answer: t.chunks.map((c) => c.raw).join(' ') }))
+      .filter((t) => t.answer);
+  },
+
+  render() {
+    if (!this.block) return;
+    const s = speaker.session;
+    const now = s?.mode === 'explain' && s.cur >= 0 ? s.sched[s.cur].seg.chunk : null;
+    const last = this.turns[this.turns.length - 1];
+    const key = [this.turns.length, last?.chunks.length, last?.done, last?.error, last?.chunks.indexOf(now)].join('|');
+    els.chatExplain.hidden = this.turns.length > 0;
+    els.chatInput.placeholder = this.turns.length ? 'Ask a follow-up…' : 'Ask about this paragraph…';
+    els.chatLog.hidden = !this.turns.length;
+    if (this.shown === key) return;
+    this.shown = key;
+    let nowEl = null;
+    els.chatLog.replaceChildren(...this.turns.flatMap((turn) => {
+      const q = document.createElement('div');
+      q.className = 'chat-q';
+      q.textContent = turn.question || 'Explain this paragraph';
+      const a = document.createElement('div');
+      a.className = 'chat-a';
+      const at = turn.chunks.indexOf(now);
+      a.append(...turn.chunks.flatMap((chunk, i) => {
+        const span = document.createElement('span');
+        span.textContent = chunk.raw;
+        // The reply being spoken dims what is still to come; finished replies are plain text.
+        if (at >= 0) span.className = i < at ? 'said' : i === at ? 'now' : 'coming';
+        if (i === at) nowEl = span;
+        return [span, ' '];
+      }));
+      if (turn.error) {
+        const err = document.createElement('span');
+        err.className = 'err';
+        err.textContent = turn.error;
+        a.append(err);
+      } else if (!turn.chunks.length) {
+        const wait = document.createElement('span');
+        wait.className = 'coming';
+        wait.textContent = turn.done ? 'No reply came back.' : 'Thinking…';
+        a.append(wait);
+      }
+      return [q, a];
+    }));
+    // Follow the sentence being spoken; otherwise stay with the newest words.
+    if (nowEl) els.chatLog.scrollTop = Math.max(0, nowEl.offsetTop - els.chatLog.offsetTop - 40);
+    else els.chatLog.scrollTop = els.chatLog.scrollHeight;
+  },
+};
+
+els.chatForm.addEventListener('submit', (e) => { e.preventDefault(); chat.send(els.chatInput.value); });
+els.chatExplain.addEventListener('click', () => { chat.send(''); els.chatInput.focus({ preventScroll: true }); });
+els.chatClose.addEventListener('click', () => chat.close());
+els.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); chat.close(); } });
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 
 for (const sp of SPEEDS) els.speedSel.add(new Option(`${sp}×`, sp));
@@ -1409,7 +1575,9 @@ els.pages.addEventListener('click', (e) => {
 });
 els.pages.addEventListener('dblclick', (e) => {
   const b = blockOf.get(e.target);
-  if (b) speaker.toggleExplain(b);
+  if (!b) return;
+  speaker.stop(); // including the reading the first click of the pair began
+  if (speaker.canExplain()) chat.open(b);
 });
 els.playBtn.addEventListener('click', () => speaker.toggle());
 els.stopBtn.addEventListener('click', () => speaker.stop());
@@ -1490,7 +1658,7 @@ addEventListener('keydown', (e) => {
     if (t.tagName === 'BUTTON' && t.matches(':focus-visible')) return; // let keyboard users press the focused button
     e.preventDefault();
     speaker.toggle();
-  } else if (e.key === 'Escape') speaker.stop();
+  } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else chat.close(); }
   else if (e.key === 'ArrowRight') speaker.skip(1);
   else if (e.key === 'ArrowLeft') speaker.skip(-1);
 });

@@ -17,12 +17,13 @@
     --paper: #fff;
     --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 14px 36px -14px rgba(40, 30, 10, .22);
     --green: #0f9d6c;
+    --blue: #2563eb;
     /* Highlights sit on the white page and blend like a marker, so they are the same in both themes. */
     --hover: rgba(128, 112, 84, .1);
     --para: rgba(106, 255, 92, 0.17);
     --sentence: rgba(56, 255, 63, 0.467);
-    --explain: rgba(64, 214, 150, .3);
-    --explain-deep: rgba(64, 214, 150, .46);
+    --explain: rgba(66, 138, 255, .24);
+    --explain-deep: rgba(66, 138, 255, .4);
     --zoom: 1;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
@@ -37,6 +38,7 @@
       --paper: #fdfcfa;
       --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 14px 36px -14px rgba(0, 0, 0, .7);
       --green: #4ade9f;
+      --blue: #7ea6ff;
     }
   }
   * { box-sizing: border-box; }
@@ -122,8 +124,8 @@
   .blk:hover { background: var(--hover); }
   .blk.active { background: var(--para); }
   .blk.active.pending { animation: breathe 1.3s ease-in-out infinite; }
-  .blk.explain { background: var(--explain); }
-  .blk.explain.pending { animation: breathe-green 1.3s ease-in-out infinite; }
+  .blk.explain, .blk.chosen { background: var(--explain); }
+  .blk.explain.pending { animation: breathe-explain 1.3s ease-in-out infinite; }
   .blk:focus-visible { outline: 2px solid #c98a00; outline-offset: 1px; }
 
   /* ── Player ──────────────────────────────────────────── */
@@ -140,7 +142,7 @@
     width: 44px; height: 44px; flex: none; display: grid; place-items: center; position: relative;
     border: 0; border-radius: 50%; background: var(--ink); color: var(--bg); transition: transform .15s, background .25s;
   }
-  .player.explaining .play { background: var(--green); color: #fff; }
+  .player.explaining .play { background: var(--blue); color: #fff; }
   .play:active { transform: scale(.93); }
   .play svg { width: 18px; height: 18px; fill: currentColor; }
   .play .i-pause, .player.playing .play .i-play { display: none; }
@@ -149,7 +151,7 @@
     content: ""; position: absolute; inset: -3px; border-radius: 50%;
     border: 2px solid transparent; border-top-color: currentColor; color: var(--ink); animation: spin .8s linear infinite;
   }
-  .player.explaining.waiting .play::after { color: var(--green); }
+  .player.explaining.waiting .play::after { color: var(--blue); }
   .now { flex: 1; min-width: 0; padding: 0 8px; }
   .now-text { font-size: 13.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -162,21 +164,41 @@
   .progress { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--ink); opacity: .55; transition: width .25s ease, opacity .4s ease; }
   .progress.done { opacity: 0; }
 
-  /* What Claude is saying, since an explanation is not on the page to follow. */
-  .caption {
+  /* ── Chat: a conversation with Claude about one paragraph, docked above the player ── */
+  .chat {
     position: fixed; left: 50%; bottom: 92px; z-index: 29; transform: translateX(-50%);
-    width: min(700px, calc(100vw - 24px)); max-height: min(34vh, 260px); overflow-y: auto; padding: 14px 20px 16px;
+    width: min(700px, calc(100vw - 24px)); max-height: min(52vh, 440px); display: flex; flex-direction: column;
     border-radius: 22px; background: var(--panel); border: 1px solid var(--line);
     box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 18px 44px -12px rgba(0, 0, 0, .28);
     -webkit-backdrop-filter: saturate(1.6) blur(20px); backdrop-filter: saturate(1.6) blur(20px);
-    animation: slide-up .35s cubic-bezier(.2, .8, .2, 1) both;
+    animation: slide-up .3s cubic-bezier(.2, .8, .2, 1) both;
   }
-  .caption-head { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--green); margin-bottom: 6px; }
-  .caption-head svg { width: 13px; height: 13px; fill: currentColor; }
-  .caption-body { font-size: 15px; line-height: 1.55; }
-  .caption-body span { transition: color .25s ease, background .25s ease; color: var(--muted); border-radius: 4px; padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-  .caption-body span.said { color: var(--ink); }
-  .caption-body span.now { color: var(--ink); background: color-mix(in srgb, var(--green) 24%, transparent); }
+  .chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 18px 4px; }
+  .chat-q {
+    width: fit-content; max-width: 85%; margin: 8px 0 8px auto; padding: 7px 12px; border-radius: 14px 14px 4px 14px;
+    background: color-mix(in srgb, var(--blue) 14%, transparent); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere;
+  }
+  .chat-a { margin: 0 0 6px; font-size: 15px; line-height: 1.55; }
+  .chat-a span { transition: color .25s ease, background .25s ease; border-radius: 4px; padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .chat-a span.coming { color: var(--muted); }
+  .chat-a span.now { background: color-mix(in srgb, var(--blue) 22%, transparent); }
+  .chat-a span.err { color: #c2410c; }
+  .chat-form { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 8px 10px 10px; }
+  .chat-form input {
+    flex: 1; min-width: 0; height: 40px; padding: 0 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--soft); font-size: 14.5px;
+  }
+  .chat-form input:focus { outline: 2px solid color-mix(in srgb, var(--blue) 60%, transparent); outline-offset: -1px; }
+  .chat-explain {
+    flex: none; height: 40px; padding: 0 14px; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent); border-radius: 999px; background: transparent;
+    color: var(--blue); font-size: 13.5px; font-weight: 600; transition: background .15s;
+  }
+  .chat-explain:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); }
+  .chat-explain svg { width: 13px; height: 13px; fill: currentColor; }
+  .chat-send { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--blue); color: #fff; transition: transform .15s; }
+  .chat-send:active { transform: scale(.93); }
+  .chat-send svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   /* ── Voice menu ──────────────────────────────────────── */
   .voice-menu {
@@ -228,11 +250,14 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes twinkle { 50% { opacity: .35; transform: scale(.8); } }
   @keyframes breathe { 50% { background: rgba(255, 214, 92, .34); } }
-  @keyframes breathe-green { 50% { background: var(--explain-deep); } }
+  @keyframes breathe-explain { 50% { background: var(--explain-deep); } }
 
   @media (max-width: 660px) {
     .player .wide, .ai-chip span { display: none; }
     .ai-chip { padding: 0 7px; }
+    .chat-form input { font-size: 16px; } /* smaller text makes phones zoom the page on focus */
+    .chat-explain span { display: none; }
+    .chat-explain { padding: 0 12px; }
     .pages { padding-left: 8px; padding-right: 8px; gap: 12px; }
     .page { width: calc((100vw - 16px) * var(--zoom)); }
   }
@@ -264,7 +289,7 @@
     <div class="drop">
       <div class="glyph"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg></div>
       <h1>Drop a PDF to listen</h1>
-      <p>Click a paragraph to hear it read aloud. Double-click one to have Claude explain it.</p>
+      <p>Click a paragraph to hear it read aloud. Double-click one to chat with Claude about it.</p>
       <button class="primary" id="chooseBtn">Choose a PDF</button>
       <p class="voice-note" id="voiceNote"></p>
     </div>
@@ -272,12 +297,17 @@
   <div class="pages" id="pages" hidden></div>
 </main>
 
-<div class="caption" id="caption" hidden>
-  <div class="caption-head">
-    <svg viewBox="0 0 24 24"><path d="M12 2.5l1.9 5.6a3 3 0 0 0 1.9 1.9l5.7 2-5.7 2a3 3 0 0 0-1.9 1.9L12 21.5l-1.9-5.6a3 3 0 0 0-1.9-1.9l-5.7-2 5.7-2a3 3 0 0 0 1.9-1.9z"/></svg>
-    Claude explains
-  </div>
-  <div class="caption-body" id="captionBody"></div>
+<div class="chat" id="chat" hidden>
+  <div class="chat-log" id="chatLog" hidden aria-live="polite"></div>
+  <form class="chat-form" id="chatForm">
+    <button type="button" class="chat-explain" id="chatExplain" title="Explain this paragraph">
+      <svg viewBox="0 0 24 24"><path d="M12 2.5l1.9 5.6a3 3 0 0 0 1.9 1.9l5.7 2-5.7 2a3 3 0 0 0-1.9 1.9L12 21.5l-1.9-5.6a3 3 0 0 0-1.9-1.9l-5.7-2 5.7-2a3 3 0 0 0 1.9-1.9z"/></svg>
+      <span>Explain</span>
+    </button>
+    <input id="chatInput" type="text" placeholder="Ask about this paragraph…" autocomplete="off" maxlength="500" aria-label="Your question about this paragraph" enterkeyhint="send">
+    <button type="submit" class="chat-send" aria-label="Send" title="Send"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+    <button type="button" class="icon-btn" id="chatClose" title="Close (Esc)" aria-label="Close the chat"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+  </form>
 </div>
 
 <div class="player" id="player" hidden>

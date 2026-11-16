@@ -174,15 +174,24 @@ export const ai = {
     }
   },
 
+  /** Ask which of a page's lines make up each paragraph. → { blocks: [{ kind, lines: [line id] }] } in reading order */
+  layout(page, lines) {
+    return this.withDoc((doc) => postJson('/api/layout', { doc: doc.id, page, lines }));
+  },
+
   /** Ask which pieces of a page need different words when spoken. → { changes: [{id, say}], skip: [block] } */
   narrate(page, pieces) {
     return this.withDoc((doc) => postJson('/api/narrate', { doc: doc.id, page, pieces }));
   },
 
-  /** Stream a spoken explanation of one paragraph; `onText` receives it piece by piece. */
-  explain({ page, text, before, after, signal, onText }) {
+  /**
+   * Stream Claude's spoken reply about one paragraph: an explanation of it or, with a `question`,
+   * an answer. `history` is the conversation so far, [{ question, answer }]; `onText` receives
+   * the reply piece by piece.
+   */
+  explain({ page, text, before, after, question = '', history = [], signal, onText }) {
     return this.withDoc(async (doc) => {
-      const { res, done } = await post('/api/explain', { doc: doc.id, page, text, before, after }, { signal });
+      const { res, done } = await post('/api/explain', { doc: doc.id, page, text, before, after, question, history }, { signal });
       try {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();

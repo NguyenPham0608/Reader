@@ -70,7 +70,7 @@ ENV_FILE = ROOT / ".env"
 MODEL = "claude-sonnet-5-5"
 # If Claude's safety classifiers decline a request, the API retries it on a fallback model.
 BETAS = ["server-side-fallback-2026-07-01"]
-PROMPT_VERSION = "3"  # bump to stop using answers cached under older prompts
+PROMPT_VERSION = "4"  # bump to stop using answers cached under older prompts
 # Sonnet 5.5 prices in dollars per million tokens (cache writes at the 1-hour rate), for the daily cap.
 PRICE = {"input": 2.0, "cache_write": 4.0, "cache_read": 0.10, "output": 10.0}
 WARM_FOR = 50 * 60  # seconds a document's prompt cache is assumed alive (it is written with a 1-hour lifetime)
@@ -84,7 +84,34 @@ SYSTEM = (
     "is heard and never seen, so it has to be plain spoken English: no markdown, no LaTeX, no symbols "
     "a voice cannot say. The complete document is attached to every request. Text extracted from a PDF "
     "loses superscripts, subscripts, fractions and special symbols, so when the extracted text and the "
-    "document disagree, trust what the document shows."
+    "document disagree, trust what the document shows.\n\n"
+    "How mathematics and notation are spoken\n"
+    "Say notation the way a person says it out loud to a colleague at a whiteboard, never the way it is "
+    "typeset. People drop almost all of the scaffolding, and so should you:\n"
+    "- A subscript is simply said after its letter: x_i is \"x i\", k_n is \"k n\", d_model is \"d model\", "
+    "h_{t-1} is \"h t minus one\". Do not say \"sub\" or \"subscript\", except in the rare case where leaving "
+    "it out would make two different things in the document sound the same.\n"
+    "- Powers: \"x squared\", \"x cubed\", \"x to the n\", \"ten to the minus nine\", \"e to the minus x\".\n"
+    "- Fractions and division: \"a over b\", \"one half\", \"one over the square root of d k\".\n"
+    "- Functions: f(x) is \"f of x\", P(A|B) is \"the probability of A given B\", O(n^2) is \"order n squared\", "
+    "max(0, x) is \"the max of zero and x\".\n"
+    "- Sums, products and integrals: \"the sum over i from one to n of x i\", \"the integral from zero to one "
+    "of f of x, d x\".\n"
+    "- Relations and operators in everyday words: \"equals\" or \"is\", \"is about\", \"is at most\", \"is at "
+    "least\", \"in\" for set membership, \"goes to\" for an arrow, \"is proportional to\". A product is "
+    "\"times\", or nothing at all where people would say \"two x\"; a cross between sizes is \"by\", as in "
+    "\"512 by 512\".\n"
+    "- Greek letters by name. Marks are named after the letter: \"x hat\", \"x bar\", \"y prime\", \"x star\", "
+    "\"Q K transpose\". Bold, calligraphic and blackboard styles are not mentioned.\n"
+    "- Brackets are not read out. Word the phrase so the grouping stays clear, with a comma for a short "
+    "pause, or \"all over\" or \"the quantity\" only where a listener would otherwise mishear the structure.\n"
+    "- Units, numbers and abbreviations become the words people say: \"5 ms\" is \"five milliseconds\", "
+    "\"3.5x\" is \"three and a half times\", \"2-5\" is \"two to five\", \"Fig. 3\" is \"Figure 3\", \"e.g.\" is "
+    "\"for example\", \"i.e.\" is \"that is\".\n"
+    "- The number or label that tags a displayed equation is not read.\n"
+    "Choose the shortest wording a listener would still follow, and say the same symbol the same way every "
+    "time. The voice reads exactly what you write, so write words and letters, never symbols, and write a "
+    "variable named a as a capital \"A\" so the voice does not take it for the word \"a\"."
 )
 
 UNDERSTAND = """Task: read the whole document and write the notes the app keeps beside it while reading it aloud.
@@ -92,17 +119,17 @@ UNDERSTAND = """Task: read the whole document and write the notes the app keeps 
 Answer with one JSON object and nothing else, with these fields:
 - "title": the document's title.
 - "summary": what the document is about, what it sets out to do and what it finds or argues, in 100 to 150 words of plain spoken English, for a listener who is new to the subject.
-- "notation": a list with one entry for each recurring symbol, variable, abbreviation or unit whose spoken form is not obvious from its spelling. Each entry has "symbol" (as written in the document), "say" (how a lecturer would speak it, the same way every time, with subscripts spoken as "sub", for example "d sub k") and "meaning" (a few words). Leave out anything a voice would already read correctly."""
+- "notation": a list with one entry for each recurring symbol, variable, abbreviation or unit whose spoken form is not obvious from its spelling. Each entry has "symbol" (as written in the document), "say" (how a person would say it aloud in conversation, the same way every time and without "sub" or "subscript", for example "d k" for d_k) and "meaning" (a few words). Leave out anything a voice would already read correctly."""
 
 NARRATE = """Task: prepare page {page} for reading aloud.
 
 Below is the text of page {page} as the app extracted it, already cut into the pieces it will speak one after another. Each piece has an id such as 12.1 (block 12, piece 1). Where the app could detect them, ^{{...}} marks a superscript and _{{...}} marks a subscript.
 
 Most pieces are ordinary prose, and those must be spoken exactly as written, so leave them out of your answer. Return only the pieces a voice would get wrong if it read them as written, each with the text to speak instead:
-- Mathematics and formulas, said the way a lecturer reads them aloud. E^{{4}} becomes "E to the fourth power", x_{{i}} becomes "x sub i", and a fraction with QK^{{T}} over the square root of d_{{k}} becomes "Q times K transpose, divided by the square root of d sub k".
-- Other notation a voice stumbles on: Greek letters and symbols, units, chemical formulas, ranges, and abbreviations that are not said as spelled ("Fig. 3" is "Figure 3", "e.g." is "for example").
+- Mathematics and formulas, said naturally, the way a person would say them to a colleague. x_{{i}} becomes "x i", k_{{n}} becomes "k n", E^{{4}} becomes "E to the fourth", and a fraction with QK^{{T}} over the square root of d_{{k}} becomes "Q K transpose over the square root of d k". It should sound like someone talking, not like someone spelling out symbols.
+- Other notation a voice stumbles on: Greek letters and symbols, units, chemical formulas, ranges, and abbreviations that are not said as spelled.
 - Damage from extraction: words glued together or broken apart, or a formula whose parts came out scrambled. Rebuild these from the document.
-- Citation and footnote markers such as [12], a superscript footnote number, or a dagger are not spoken, so remove them.
+- Citation and footnote markers such as [12], a superscript footnote number, or a dagger are not spoken, so remove them. Where the sentence leans on the marker as if it were a word ("such as [38, 2, 9]", "similar to [30]"), say "references 38, 2 and 9" or "reference 30" there instead, so the sentence still makes sense.
 Within a piece you return, keep every ordinary word exactly as it is and in the same order, and never move words from one piece into another. Do not summarize, explain or add anything.
 
 Also give, under "skip", the block numbers of anything that is not part of the document's running text and should be passed over during continuous reading: page numbers, running headers and footers, line numbers, watermarks and stamps, and stray labels that belong to the inside of a figure. Headings, captions, footnotes, equations and tables stay.
@@ -112,10 +139,43 @@ Page {page} pieces:
 
 Answer with one JSON object and nothing else, in this shape: {{"changes": [{{"id": "5.1", "say": "..."}}], "skip": [0, 13]}}. Use empty lists when there is nothing to report."""
 
+LAYOUT = """Task: find the paragraphs on page {page}.
+
+Below is every line of text the app extracted from page {page}, in the order the PDF stores them. Each has an id, where it sits (x and y of its left end, in points from the top-left corner of the page, and its type size) and its text, with ^{{...}} around a superscript and _{{...}} around a subscript where the app could tell. Extraction is rough: the pieces of a formula (a numerator, a denominator, a limit, an equation number) come out as separate short lines, a table comes out cell by cell, and the stored order is not always the reading order. Look at the page itself in the document to see what belongs together.
+
+Group the lines into blocks. A block is what a reader would point at and say "read me this one":
+- each paragraph of running text, however many lines it has;
+- each heading or title;
+- each displayed equation, together with all of its fragments and its equation number;
+- each item of a list, each figure or table caption, each footnote, each entry in a reference list, each author with their affiliation and email;
+- each row of a table.
+The app draws one box around a block, so a block has to be a single compact patch of the page. When a paragraph is interrupted by a displayed equation or a figure, or runs on from the bottom of one column to the top of the next, each part is its own block, and lines from different columns never share a block.
+Use the kind "skip" for whatever is not part of what the document says: page numbers, running headers and footers, line numbers, watermarks and margin stamps, and stray labels and numbers that belong to the inside of a figure or chart.
+
+List the blocks in reading order, and the lines within a block in reading order. Every line id belongs to exactly one block.
+
+Page {page} lines:
+{lines}
+
+Answer with one JSON object and nothing else, in this shape: {{"blocks": [["heading", "0"], ["paragraph", "1-9"], ["equation", "10-12,14"], ["skip", "13"]]}}. Each block is a kind followed by its line ids, written as numbers and ranges. The kinds are: heading, paragraph, equation, list, caption, table, footnote, reference, other, skip."""
+
 EXPLAIN = """Task: the listener double-clicked the paragraph below, on page {page}, because they want to understand it. Explain what it means: what it is saying in plain words and why it matters here, using the rest of the document for any terms, symbols or earlier results it relies on. Talk to them the way you would to a curious colleague from another field, and go straight into the explanation without announcing it. This is a quick spoken aside before they carry on reading, so keep it to three or four sentences, and no more than about ninety words.
 {context}
 Paragraph:
 {text}"""
+
+ASK = """Task: the listener is following page {page} and double-clicked the paragraph below to ask a question about it. Answer the question, using that paragraph and the rest of the document for whatever it relies on. If the document does not settle it, say so in a few words and then give what is generally known. Talk to them the way you would to a curious colleague from another field, and go straight into the answer without repeating the question. Your answer is spoken aloud as a quick aside before they carry on reading, so give the direct answer first and keep it as short as the question allows: usually two to five sentences, and no more than about a hundred and fifty words.
+{context}
+Paragraph:
+{text}
+
+The listener's question:
+{question}"""
+
+FOLLOW_UP = """The listener goes on:
+{question}
+
+Reply the same way as before: spoken aloud as a quick aside, the direct answer first, in plain sentences, and no more than about a hundred and fifty words."""
 
 
 class ApiError(Exception):
@@ -267,7 +327,7 @@ class Claude:
             print(f"[claude] uploaded {'a document' if OPEN else repr(name)} ({len(data) // 1024} KB)", flush=True)
         return sha, read_json(self.doc_dir(sha) / "notes.json")
 
-    def _request(self, meta, task):
+    def _request(self, meta, task, turns=()):
         return dict(
             model=MODEL,
             betas=BETAS,
@@ -285,7 +345,7 @@ class Claude:
                     },
                     {"type": "text", "text": task},
                 ],
-            }],
+            }, *turns],  # `turns`: the rest of a conversation that began with this task
         )
 
     def _call(self, fn, sha=None):
@@ -326,14 +386,14 @@ class Claude:
             print(f"[claude] cached document: {u.cache_creation_input_tokens} tokens written, "
                   f"{u.cache_read_input_tokens} already cached ({time.time() - t:.1f}s)", flush=True)
 
-    def run(self, sha, label, task, on_text=None):
+    def run(self, sha, label, task, on_text=None, turns=()):
         meta = self.meta(sha)
         allowance.check()
         self._ensure_warm(sha, meta)
         t = time.time()
 
         def go():
-            with self.client().beta.messages.stream(max_tokens=64000, **self._request(meta, task)) as stream:
+            with self.client().beta.messages.stream(max_tokens=64000, **self._request(meta, task, turns)) as stream:
                 for text in stream.text_stream:
                     if on_text:
                         on_text(text)
@@ -349,7 +409,46 @@ class Claude:
             raise ApiError(422, "refused", "Claude declined this request.")
         return "".join(b.text for b in msg.content if b.type == "text")
 
-    # -- the three jobs ------------------------------------------------------
+    # -- the jobs ------------------------------------------------------------
+
+    KINDS = {"heading", "paragraph", "equation", "list", "caption", "table", "footnote", "reference", "other", "skip"}
+
+    def layout(self, sha, page, lines):
+        """Which of a page's lines make up each paragraph. → {"blocks": [{"kind", "lines": [id]}]} in reading order."""
+        lines = [(int(ln["id"]), int(ln.get("x", 0)), int(ln.get("y", 0)), float(ln.get("size", 0)), " ".join(str(ln.get("text", "")).split())[:240])
+                 for ln in lines[:2000]]
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, lines]).encode()).hexdigest()[:16]
+        path = self.doc_dir(sha) / "layout" / f"{page}-{key}.json"
+        cached = read_json(path)
+        if cached:
+            return cached
+        listing = "\n".join(f"{i} | x={x} y={y} size={size:g} | {text}" for i, x, y, size, text in lines)
+        data = parse_json_answer(self.run(sha, f"find the paragraphs on page {page}", LAYOUT.format(page=page, lines=listing)))
+        known, seen, blocks = {ln[0] for ln in lines}, set(), []
+        for item in data.get("blocks", []):
+            if not (isinstance(item, list) and len(item) == 2):
+                continue
+            kind, spec = item
+            if isinstance(spec, list):
+                spec = ",".join(str(x) for x in spec)
+            ids = []
+            for part in str(spec).split(","):
+                lo, _, hi = part.strip().partition("-")
+                try:
+                    lo, hi = int(lo), int(hi or lo)
+                except ValueError:
+                    continue
+                for i in range(lo, min(hi, lo + 2000) + 1):
+                    if i in known and i not in seen:  # each line belongs to one block: the first that claims it
+                        seen.add(i)
+                        ids.append(i)
+            if ids:
+                blocks.append({"kind": kind if kind in self.KINDS else "other", "lines": ids})
+        if not blocks:
+            raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.")
+        result = {"blocks": blocks}
+        write_json(path, result)
+        return result
 
     def understand(self, sha):
         path = self.doc_dir(sha) / "notes.json"
@@ -398,10 +497,15 @@ class Claude:
         write_json(path, result)
         return result
 
-    def explain(self, sha, page, text, before, after, on_text):
-        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text]).encode()).hexdigest()[:16]
+    def explain(self, sha, page, text, before, after, on_text, question="", history=()):
+        """Explain a paragraph aloud or, given a question about it, answer that instead.
+
+        `history` is the conversation about this paragraph so far, as (question, answer) pairs;
+        with it, `question` is a follow-up and Claude sees the earlier turns.
+        """
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text] + ([question] if question else [])).encode()).hexdigest()[:16]
         path = self.doc_dir(sha) / "explain" / f"{key}.json"
-        cached = read_json(path)
+        cached = None if history else read_json(path)  # a follow-up depends on what was said before it
         if cached:
             on_text(cached["text"])
             return
@@ -409,8 +513,20 @@ class Claude:
         if before or after:
             context = "\nTo help you find it on the page, the text just before it is:\n" + (before or "(nothing)") + \
                       "\nand the text just after it is:\n" + (after or "(nothing)") + "\n"
-        answer = self.run(sha, f"explain a paragraph on page {page}", EXPLAIN.format(page=page, context=context, text=text), on_text)
-        if answer.strip():
+        first = history[0][0] if history else question  # what opened the conversation
+        if first:
+            label, task = "answer a question", ASK.format(page=page, context=context, text=text, question=first)
+        else:
+            label, task = "explain a paragraph", EXPLAIN.format(page=page, context=context, text=text)
+        turns = []
+        for i, (_, said) in enumerate(history):
+            then = history[i + 1][0] if i + 1 < len(history) else question
+            turns.append({"role": "assistant", "content": said})
+            turns.append({"role": "user", "content": FOLLOW_UP.format(question=then or "Explain this paragraph.")})
+        if history:
+            label = "answer a follow-up"
+        answer = self.run(sha, f"{label} on page {page}", task, on_text, turns)
+        if answer.strip() and not history:
             write_json(path, {"text": answer})
 
 
@@ -549,6 +665,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(claude.status())
             if url.path == "/api/understand":
                 return self._json(claude.understand(req["doc"]))
+            if url.path == "/api/layout":
+                return self._json(claude.layout(req["doc"], int(req["page"]), req["lines"]))
             if url.path == "/api/narrate":
                 return self._json(claude.narrate(req["doc"], int(req["page"]), req["pieces"]))
             if url.path == "/api/explain":
@@ -564,6 +682,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _explain(self, req):
         """Stream the explanation as plain text, so speech can start on the first sentence."""
         started = False
+        clean = lambda v: " ".join(str(v).split())
 
         def on_text(text):
             nonlocal started
@@ -577,7 +696,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         try:
             claude.explain(req["doc"], int(req["page"]), str(req["text"])[:6000],
-                           str(req.get("before", ""))[:600], str(req.get("after", ""))[:600], on_text)
+                           str(req.get("before", ""))[:600], str(req.get("after", ""))[:600], on_text,
+                           clean(req.get("question", ""))[:1000],
+                           [(clean(h.get("question", ""))[:1000], clean(h.get("answer", ""))[:6000])
+                            for h in req.get("history", [])[-12:] if clean(h.get("answer", ""))])
             if not started:
                 raise ApiError(502, "bad_output", "Claude returned nothing.")
         except ApiError:
