@@ -16,8 +16,11 @@ from ANTHROPIC_API_KEY or from a .env file next to this script.
 Hosted on Render (see render.yaml) it listens publicly and anyone with the
 address can use it, paid for by the owner's API key. To keep that bounded it
 stops calling Claude once a day's use reaches READER_DAILY_BUDGET dollars
-(reading aloud carries on). Setting READER_PASSWORD makes it private instead:
-the browser then asks for the password, and the daily cap no longer applies.
+(reading aloud carries on). READER_ACCESS=password with READER_PASSWORD makes
+it private instead: the browser then asks for the password, and the daily cap
+no longer applies. READER_ALLOWED_ORIGINS names other sites whose copy of the
+page may use this server, such as the GitHub Pages address; the word
+"localhost" in that list allows a copy served from anyone's own machine.
 
 The two Cross-Origin headers let the page use threads and the GPU for speech.
 """
@@ -28,6 +31,7 @@ import hmac
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -45,7 +49,18 @@ _ports = [a for a in sys.argv[1:] if not a.startswith("--")]
 PORT = int(_ports[0]) if _ports else int(os.environ.get("PORT") or 10000) if HOSTED else 8137
 BIND = "0.0.0.0" if HOSTED else "127.0.0.1"
 PUBLIC_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "") if HOSTED else ""
-PASSWORD = os.environ.get("READER_PASSWORD", "")
+# READER_ACCESS=open ignores any password, so the choice in render.yaml decides it.
+PASSWORD = "" if os.environ.get("READER_ACCESS") == "open" else os.environ.get("READER_PASSWORD", "")
+# Other sites that host a copy of the page and may call this server from the browser.
+ALLOWED_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("READER_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+LOCAL_ORIGIN = re.compile(r"http://(localhost|127\.0\.0\.1)(:\d+)?")
+
+
+def origin_allowed(origin):
+    """Whether a page served from `origin` (another site) may call this server."""
+    if not origin:
+        return False
+    return origin in ALLOWED_ORIGINS or ("localhost" in ALLOWED_ORIGINS and bool(LOCAL_ORIGIN.fullmatch(origin)))
 OPEN = HOSTED and not PASSWORD  # anyone with the address can use it, on the owner's key
 DAILY_BUDGET = float(os.environ.get("READER_DAILY_BUDGET") or 3)  # dollars of Claude use a day while open
 ROOT = Path(__file__).resolve().parent
@@ -414,6 +429,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cache-Control", "no-cache")
+        origin = self.headers.get("Origin")
+        if origin_allowed(origin) and self.path.startswith("/api/"):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         super().end_headers()
 
     def log_message(self, *args):
@@ -434,7 +453,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if PUBLIC_HOST:
             origins = {PUBLIC_HOST: f"https://{PUBLIC_HOST}"}
         host, origin = self.headers.get("Host"), self.headers.get("Origin")
-        if host not in origins or (origin and origin != origins[host]):
+        if host not in origins or (origin and origin != origins[host] and not origin_allowed(origin)):
             return False
         return self.command != "POST" or self.headers.get("X-Reader") == "1"
 
@@ -470,6 +489,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         if not self._gate():
             super().do_HEAD()
+
+    def do_OPTIONS(self):
+        """The browser's permission check before a page on another site may post to /api."""
+        ok = origin_allowed(self.headers.get("Origin")) and self.path.startswith("/api/")
+        self.send_response(204 if ok else 403)
+        if ok:
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Reader")
+            self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _json(self, data, status=200):
         body = json.dumps(data).encode()

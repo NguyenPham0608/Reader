@@ -2,7 +2,8 @@
 # In the Render dashboard choose New > Blueprint and pick this repository.
 #
 # Anyone with the address can use it, paid for by ANTHROPIC_API_KEY, up to READER_DAILY_BUDGET
-# dollars of Claude use a day. To make it private instead, add READER_PASSWORD in the dashboard.
+# dollars of Claude use a day. To make it private instead, set READER_ACCESS to password and
+# add READER_PASSWORD in the dashboard (the GitHub Pages copy then stops working).
 services:
   - type: web
     name: reader
@@ -18,3 +19,9 @@ services:
         sync: false # Render asks for it when the blueprint is created
       - key: READER_DAILY_BUDGET
         value: 3
+      - key: READER_ACCESS
+        value: open
+      # Copies of the page allowed to use this server: the GitHub Pages one, and (the word
+      # "localhost") one served from your own machine, for testing against this backend.
+      - key: READER_ALLOWED_ORIGINS
+        value: https://nguyenpham0608.github.io,localhost

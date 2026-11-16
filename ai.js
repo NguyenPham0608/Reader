@@ -1,9 +1,19 @@
-// The page's side of the Claude features. All requests go to the local server (serve.py),
+// The page's side of the Claude features. All requests go to the reader's server (serve.py),
 // which holds the API key and talks to Claude; nothing here contacts Anthropic directly.
+
+// Where that server is when this page is opened from somewhere that only hosts the page itself
+// (GitHub Pages, or an editor's live preview). The server has to allow that site in
+// READER_ALLOWED_ORIGINS. Adding ?backend=render to the address uses it from any copy of the page.
+const HOSTED_BACKEND = 'https://reader-eiv5.onrender.com';
+const FORCE_HOSTED = new URLSearchParams(location.search).get('backend') === 'render';
+const ON_THIS_MACHINE = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+let base = ''; // '' while the server that sent this page is also the one that answers /api
 
 const MESSAGES = {
   no_sdk: 'Claude is off: start the reader with “uv run serve.py”.',
   elsewhere: 'Claude only works at the reader’s own address. Open http://localhost:8137 instead of this page.',
+  waking: 'Claude is waking up. This can take a minute.',
+  unreachable: 'Could not reach the reader’s Claude server. Reload the page to try again.',
   no_key: 'Claude needs an Anthropic API key.',
   auth: 'The Anthropic API key was not accepted.',
   offline: 'Could not reach Claude. Check the connection.',
@@ -19,13 +29,24 @@ export class AiError extends Error {
   }
 }
 
+/** Ask a server whether it is the reader's. → its status, 'other' if something else answered, null if nothing did. */
+async function probe(origin, timeout) {
+  try {
+    const res = await fetch(`${origin}/api/status`, { signal: AbortSignal.timeout(timeout) });
+    const s = await res.json().catch(() => null);
+    return res.ok && s && 'available' in s ? s : 'other';
+  } catch {
+    return null;
+  }
+}
+
 async function post(path, body, { type = 'application/json', signal, timeout = 90000 } = {}) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(new AiError('offline', 'Claude took too long to answer.')), timeout);
   signal?.addEventListener('abort', () => ctl.abort(signal.reason), { once: true });
   let res;
   try {
-    res = await fetch(path, {
+    res = await fetch(base + path, {
       method: 'POST',
       headers: { 'X-Reader': '1', 'Content-Type': type },
       body: type === 'application/json' ? JSON.stringify(body) : body,
@@ -51,20 +72,23 @@ async function postJson(path, body, opts) {
 
 export const ai = {
   available: false,
-  reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key | elsewhere
+  reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key | elsewhere | waking | unreachable
   model: '',
   /** The open document as Claude knows it: { state, id, notes, error, ready } */
   doc: null,
   onChange: () => {},
 
   async init() {
-    let s = { available: false, reason: 'no_sdk' };
-    try {
-      const res = await fetch('/api/status');
-      s = await res.json().catch(() => null);
-      // An editor's live preview, or any other web server, can show this page but has no /api.
-      if (!res.ok || !s || !('available' in s)) s = { available: false, reason: 'elsewhere' };
-    } catch { /* nothing answered at all: the reader's server is not running */ }
+    let s = FORCE_HOSTED ? null : await probe('', 15000);
+    if (!s || s === 'other') {
+      // Whatever sent this page has no /api: use the hosted server, which sleeps when idle and
+      // takes about a minute to wake.
+      Object.assign(this, { available: false, reason: 'waking' });
+      this.onChange();
+      s = await probe(HOSTED_BACKEND, 120000);
+      if (s && s !== 'other') base = HOSTED_BACKEND;
+      else s = { available: false, reason: ON_THIS_MACHINE && !FORCE_HOSTED ? 'elsewhere' : 'unreachable' };
+    }
     Object.assign(this, { available: !!s.available, reason: s.reason || null, model: s.model || '' });
     this.onChange();
   },

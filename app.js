@@ -1339,8 +1339,8 @@ function renderCaption() {
 function renderChip() {
   let state = 'on', text = 'Claude on', title = 'Claude prepares formulas and notation for reading aloud. Click to turn off.';
   if (!ai.available) {
-    state = 'off';
-    text = ai.reason === 'no_key' ? 'Connect Claude' : 'Claude off';
+    state = ai.reason === 'waking' ? 'busy' : 'off';
+    text = ai.reason === 'no_key' ? 'Connect Claude' : ai.reason === 'waking' ? 'Waking Claude…' : 'Claude off';
     title = ai.reason === 'no_key' ? 'Add an Anthropic API key to turn on Claude.' : ai.offMessage;
   } else if (!settings.ai) {
     state = 'off'; text = 'Claude off'; title = 'Click to have Claude prepare formulas and notation for reading aloud.';
