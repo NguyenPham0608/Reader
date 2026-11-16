@@ -1,0 +1,4 @@
+.env
+.reader-cache/
+.venv/
+__pycache__/
