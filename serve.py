@@ -13,9 +13,11 @@ sends the document here once, and asks this server to prepare pages for
 reading aloud or to explain a paragraph. The API key stays on this side, read
 from ANTHROPIC_API_KEY or from a .env file next to this script.
 
-Hosted on Render (see render.yaml) it listens publicly, so every request must
-carry the password in READER_PASSWORD; the browser asks for it once. Without a
-password it refuses to start there, because anyone could spend the API key.
+Hosted on Render (see render.yaml) it listens publicly and anyone with the
+address can use it, paid for by the owner's API key. To keep that bounded it
+stops calling Claude once a day's use reaches READER_DAILY_BUDGET dollars
+(reading aloud carries on). Setting READER_PASSWORD makes it private instead:
+the browser then asks for the password, and the daily cap no longer applies.
 
 The two Cross-Origin headers let the page use threads and the GPU for speech.
 """
@@ -44,6 +46,8 @@ PORT = int(_ports[0]) if _ports else int(os.environ.get("PORT") or 10000) if HOS
 BIND = "0.0.0.0" if HOSTED else "127.0.0.1"
 PUBLIC_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "") if HOSTED else ""
 PASSWORD = os.environ.get("READER_PASSWORD", "")
+OPEN = HOSTED and not PASSWORD  # anyone with the address can use it, on the owner's key
+DAILY_BUDGET = float(os.environ.get("READER_DAILY_BUDGET") or 3)  # dollars of Claude use a day while open
 ROOT = Path(__file__).resolve().parent
 CACHE = ROOT / ".reader-cache"
 ENV_FILE = ROOT / ".env"
@@ -52,8 +56,12 @@ MODEL = "claude-sonnet-5-5"
 # If Claude's safety classifiers decline a request, the API retries it on a fallback model.
 BETAS = ["server-side-fallback-2026-07-01"]
 PROMPT_VERSION = "3"  # bump to stop using answers cached under older prompts
+# Sonnet 5.5 prices in dollars per million tokens (cache writes at the 1-hour rate), for the daily cap.
+PRICE = {"input": 2.0, "cache_write": 4.0, "cache_read": 0.10, "output": 10.0}
 WARM_FOR = 50 * 60  # seconds a document's prompt cache is assumed alive (it is written with a 1-hour lifetime)
 MAX_BODY = 80 * 1024 * 1024
+MAX_PDF = 32 * 1024 * 1024  # the page sends larger documents as text instead
+MAX_TEXT = 8 * 1024 * 1024
 
 SYSTEM = (
     "You work inside a read-aloud app for PDF documents. A listener hears your words through a "
@@ -134,6 +142,43 @@ def parse_json_answer(text):
         raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.") from e
 
 
+class Allowance:
+    """How much Claude use the open, hosted reader has paid for today.
+
+    The tally is kept in memory, so it starts again whenever the service restarts: it stops
+    runaway use, and a spend limit set in the Anthropic Console is what holds for certain.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._day, self._spent = None, 0.0
+
+    def _today(self):
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if today != self._day:
+            self._day, self._spent = today, 0.0
+
+    def check(self):
+        if not OPEN:
+            return
+        with self._lock:
+            self._today()
+            if self._spent >= DAILY_BUDGET:
+                raise ApiError(429, "limit", "Today's shared Claude allowance is used up, so text is read as written. It resets tomorrow.")
+
+    def charge(self, usage):
+        if not OPEN:
+            return
+        cost = (usage.input_tokens * PRICE["input"] + (usage.cache_creation_input_tokens or 0) * PRICE["cache_write"]
+                + (usage.cache_read_input_tokens or 0) * PRICE["cache_read"] + usage.output_tokens * PRICE["output"]) / 1e6
+        with self._lock:
+            self._today()
+            self._spent += cost
+
+
+allowance = Allowance()
+
+
 class Claude:
     """Everything that calls the Claude API. One instance, shared by request threads."""
 
@@ -196,12 +241,15 @@ class Claude:
         path = self.doc_dir(sha) / "meta.json"
         meta = None if force else read_json(path)
         if not meta:
+            if len(data) > (MAX_PDF if mime == "application/pdf" else MAX_TEXT):
+                raise ApiError(413, "too_large", "That document is too large for Claude.")
+            allowance.check()
             filename = "document.pdf" if mime == "application/pdf" else "document.txt"
             uploaded = self._call(lambda: self.client().files.upload(file=(filename, data, mime)))
             meta = {"file_id": uploaded.id, "mime": mime, "name": name, "created": int(time.time())}
             write_json(path, meta)
             self._warm_at.pop(sha, None)
-            print(f"[claude] uploaded {name!r} ({len(data) // 1024} KB)")
+            print(f"[claude] uploaded {'a document' if OPEN else repr(name)} ({len(data) // 1024} KB)", flush=True)
         return sha, read_json(self.doc_dir(sha) / "notes.json")
 
     def _request(self, meta, task):
@@ -259,11 +307,13 @@ class Claude:
             r = self._call(lambda: self.client().beta.messages.create(max_tokens=0, **self._request(meta, "Ready.")), sha)
             self._warm_at[sha] = time.time()
             u = r.usage
+            allowance.charge(u)
             print(f"[claude] cached document: {u.cache_creation_input_tokens} tokens written, "
-                  f"{u.cache_read_input_tokens} already cached ({time.time() - t:.1f}s)")
+                  f"{u.cache_read_input_tokens} already cached ({time.time() - t:.1f}s)", flush=True)
 
     def run(self, sha, label, task, on_text=None):
         meta = self.meta(sha)
+        allowance.check()
         self._ensure_warm(sha, meta)
         t = time.time()
 
@@ -277,8 +327,9 @@ class Claude:
         msg = self._call(go, sha)
         self._warm_at[sha] = time.time()
         u = msg.usage
+        allowance.charge(u)
         print(f"[claude] {label}: {u.cache_read_input_tokens} cached + {u.input_tokens + u.cache_creation_input_tokens} new in, "
-              f"{u.output_tokens} out ({time.time() - t:.1f}s)")
+              f"{u.output_tokens} out ({time.time() - t:.1f}s)", flush=True)
         if msg.stop_reason == "refusal":
             raise ApiError(422, "refused", "Claude declined this request.")
         return "".join(b.text for b in msg.content if b.type == "text")
@@ -507,8 +558,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     load_env_file()
-    if HOSTED and not PASSWORD:
-        sys.exit("Refusing to start: set READER_PASSWORD, or anyone with the address could spend the API key.")
     handler = functools.partial(Handler, directory=str(ROOT))
     with http.server.ThreadingHTTPServer((BIND, PORT), handler) as httpd:
         url = f"https://{PUBLIC_HOST}/" if PUBLIC_HOST else f"http://localhost:{PORT}/"
@@ -516,6 +565,10 @@ if __name__ == "__main__":
         note = {"no_sdk": "off (start with 'uv run serve.py' to turn it on)", "no_key": "waiting for an API key", None: f"on, using {MODEL}"}
         print(f"Reader is running at {url}  (Ctrl+C to stop)", flush=True)
         print(f"Claude features: {note[state['reason']]}", flush=True)
+        if OPEN:
+            print(f"Open to anyone with the address; Claude use stops at ${DAILY_BUDGET:g} a day.", flush=True)
+        elif HOSTED:
+            print("Private: every request needs the password.", flush=True)
         if "--no-open" not in sys.argv and not HOSTED:
             threading.Timer(0.4, webbrowser.open, args=(url,)).start()
         try:

@@ -1,5 +1,8 @@
 # Render blueprint: one web service that serves the page and talks to Claude.
 # In the Render dashboard choose New > Blueprint and pick this repository.
+#
+# Anyone with the address can use it, paid for by ANTHROPIC_API_KEY, up to READER_DAILY_BUDGET
+# dollars of Claude use a day. To make it private instead, add READER_PASSWORD in the dashboard.
 services:
   - type: web
     name: reader
@@ -13,5 +16,5 @@ services:
         value: 3.13.14
       - key: ANTHROPIC_API_KEY
         sync: false # Render asks for it when the blueprint is created
-      - key: READER_PASSWORD
-        generateValue: true # read it afterwards under Environment in the dashboard
+      - key: READER_DAILY_BUDGET
+        value: 3
