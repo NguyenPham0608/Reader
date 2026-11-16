@@ -3,6 +3,7 @@
 
 const MESSAGES = {
   no_sdk: 'Claude is off: start the reader with “uv run serve.py”.',
+  elsewhere: 'Claude only works at the reader’s own address. Open http://localhost:8137 instead of this page.',
   no_key: 'Claude needs an Anthropic API key.',
   auth: 'The Anthropic API key was not accepted.',
   offline: 'Could not reach Claude. Check the connection.',
@@ -50,20 +51,27 @@ async function postJson(path, body, opts) {
 
 export const ai = {
   available: false,
-  reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key
+  reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key | elsewhere
   model: '',
   /** The open document as Claude knows it: { state, id, notes, error, ready } */
   doc: null,
   onChange: () => {},
 
   async init() {
+    let s = { available: false, reason: 'no_sdk' };
     try {
-      const s = await (await fetch('/api/status')).json();
-      Object.assign(this, { available: !!s.available, reason: s.reason || null, model: s.model || '' });
-    } catch {
-      Object.assign(this, { available: false, reason: 'no_sdk' });
-    }
+      const res = await fetch('/api/status');
+      s = await res.json().catch(() => null);
+      // An editor's live preview, or any other web server, can show this page but has no /api.
+      if (!res.ok || !s || !('available' in s)) s = { available: false, reason: 'elsewhere' };
+    } catch { /* nothing answered at all: the reader's server is not running */ }
+    Object.assign(this, { available: !!s.available, reason: s.reason || null, model: s.model || '' });
     this.onChange();
+  },
+
+  /** Why Claude can't be used, in words for the reader. */
+  get offMessage() {
+    return MESSAGES[this.reason] || MESSAGES.no_sdk;
   },
 
   async setKey(key) {

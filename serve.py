@@ -13,10 +13,16 @@ sends the document here once, and asks this server to prepare pages for
 reading aloud or to explain a paragraph. The API key stays on this side, read
 from ANTHROPIC_API_KEY or from a .env file next to this script.
 
+Hosted on Render (see render.yaml) it listens publicly, so every request must
+carry the password in READER_PASSWORD; the browser asks for it once. Without a
+password it refuses to start there, because anyone could spend the API key.
+
 The two Cross-Origin headers let the page use threads and the GPU for speech.
 """
+import base64
 import functools
 import hashlib
+import hmac
 import http.server
 import json
 import os
@@ -32,8 +38,12 @@ try:
 except ImportError:  # started with plain python3: the reader still works, without Claude
     anthropic = None
 
+HOSTED = os.environ.get("RENDER") == "true"  # on Render, rather than on your own machine
 _ports = [a for a in sys.argv[1:] if not a.startswith("--")]
-PORT = int(_ports[0]) if _ports else 8137
+PORT = int(_ports[0]) if _ports else int(os.environ.get("PORT") or 10000) if HOSTED else 8137
+BIND = "0.0.0.0" if HOSTED else "127.0.0.1"
+PUBLIC_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "") if HOSTED else ""
+PASSWORD = os.environ.get("READER_PASSWORD", "")
 ROOT = Path(__file__).resolve().parent
 CACHE = ROOT / ".reader-cache"
 ENV_FILE = ROOT / ".env"
@@ -153,6 +163,8 @@ class Claude:
         """Check a key against the API and, if it works, keep it in .env for next time."""
         if anthropic is None:
             raise ApiError(503, "no_sdk", "Start the reader with 'uv run serve.py' to use Claude.")
+        if HOSTED:  # the disk there is wiped on every restart, so a key saved to .env would not last
+            raise ApiError(403, "hosted", "Set ANTHROPIC_API_KEY in the Render dashboard instead.")
         try:
             anthropic.Anthropic(api_key=key).models.retrieve(MODEL)
         except anthropic.AuthenticationError as e:
@@ -367,11 +379,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _allowed(self):
         """Only this page may use the API: other sites open in the browser must not spend the key."""
-        hosts = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
-        origin = self.headers.get("Origin")
-        if self.headers.get("Host") not in hosts or (origin and origin not in {f"http://{h}" for h in hosts}):
+        origins = {f"localhost:{PORT}": f"http://localhost:{PORT}", f"127.0.0.1:{PORT}": f"http://127.0.0.1:{PORT}"}
+        if PUBLIC_HOST:
+            origins = {PUBLIC_HOST: f"https://{PUBLIC_HOST}"}
+        host, origin = self.headers.get("Host"), self.headers.get("Origin")
+        if host not in origins or (origin and origin != origins[host]):
             return False
         return self.command != "POST" or self.headers.get("X-Reader") == "1"
+
+    def _signed_in(self):
+        """With a password set, every request needs it (HTTP Basic sign-in; any user name)."""
+        if not PASSWORD:
+            return True
+        kind, _, value = (self.headers.get("Authorization") or "").partition(" ")
+        try:
+            given = base64.b64decode(value).decode().partition(":")[2]
+        except ValueError:
+            return False
+        return kind.lower() == "basic" and hmac.compare_digest(given.encode(), PASSWORD.encode())
+
+    def _gate(self):
+        """Answer the requests that never reach the reader itself. True when the request is finished."""
+        if urlparse(self.path).path == "/healthz":  # Render's check that the service is up
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(b"ok")
+            return True
+        if not self._signed_in():
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="Reader", charset="UTF-8"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return True
+        return False
+
+    def do_HEAD(self):
+        if not self._gate():
+            super().do_HEAD()
 
     def _json(self, data, status=200):
         body = json.dumps(data).encode()
@@ -388,6 +435,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self.rfile.read(length)
 
     def do_GET(self):
+        if self._gate():
+            return
         if not self.path.startswith("/api/"):
             return super().do_GET()
         if not self._allowed():
@@ -397,6 +446,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._json({"error": "not_found"}, 404)
 
     def do_POST(self):
+        if self._gate():
+            return
         url = urlparse(self.path)
         if not url.path.startswith("/api/") or not self._allowed():
             return self._json({"error": "forbidden"}, 403)
@@ -456,14 +507,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     load_env_file()
+    if HOSTED and not PASSWORD:
+        sys.exit("Refusing to start: set READER_PASSWORD, or anyone with the address could spend the API key.")
     handler = functools.partial(Handler, directory=str(ROOT))
-    with http.server.ThreadingHTTPServer(("127.0.0.1", PORT), handler) as httpd:
-        url = f"http://localhost:{PORT}/"
+    with http.server.ThreadingHTTPServer((BIND, PORT), handler) as httpd:
+        url = f"https://{PUBLIC_HOST}/" if PUBLIC_HOST else f"http://localhost:{PORT}/"
         state = claude.status()
         note = {"no_sdk": "off (start with 'uv run serve.py' to turn it on)", "no_key": "waiting for an API key", None: f"on, using {MODEL}"}
-        print(f"Reader is running at {url}  (Ctrl+C to stop)")
-        print(f"Claude features: {note[state['reason']]}")
-        if "--no-open" not in sys.argv:
+        print(f"Reader is running at {url}  (Ctrl+C to stop)", flush=True)
+        print(f"Claude features: {note[state['reason']]}", flush=True)
+        if "--no-open" not in sys.argv and not HOSTED:
             threading.Timer(0.4, webbrowser.open, args=(url,)).start()
         try:
             httpd.serve_forever()

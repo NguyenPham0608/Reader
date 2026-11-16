@@ -1,16 +1,16 @@
-# Graph Report - Reader  (2026-11-14)
+# Graph Report - Reader  (2026-11-15)
 
 ## Corpus Check
-- 35 files · ~114,118 words
+- 35 files · ~114,523 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6152 nodes · 13197 edges · 363 communities (96 shown, 267 thin omitted)
+- 6157 nodes · 13207 edges · 344 communities (93 shown, 251 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 204 edges (avg confidence: 0.53)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `54c9a425`
+- Built from commit: `d6c11713`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -115,7 +115,7 @@
 - TextLayer
 - Util
 - .forEach
-- ChunkedStreamManager
+- stringToBytes
 - FreeDrawOutliner
 - .constructor
 - ChunkedStream
@@ -166,6 +166,7 @@
 - CompiledFont
 - GlobalWorkerOptions
 - Metadata
+- .getByRef
 - CFFIndex
 - CFFStrings
 - DeviceRgbCS
@@ -219,7 +220,7 @@
 - Window
 - xdp_Xdp
 - XdpNamespace
-- ADBE_JSConsole
+- AlwaysEmbed
 - ADBE_JSDebugger
 - AddSilentPrint
 - AdjustData
@@ -242,10 +243,11 @@
 - config_FontInfo
 - config_Message
 - config_Picture
-- config_Script
+- Desc
 - config_Template
 - config_Validate
 - Conformance
+- ContentCopy
 - Copies
 - Creator
 - CurrencySymbols
@@ -328,52 +330,33 @@
 - RefElement
 - RenderPolicy
 - RootElement
-- SetProperty
 - signature_Signature
 - SilentPrint
 - SoapAction
-- SoapAddress
 - StrikeOutAnnotation
-- StructElement
 - Stylesheet
 - Sub
-- SubmitFormat
 - SubmitUrl
-- SubsetBelow
 - Threshold
 - TimePatterns
-- To
-- ToolTip
 - Transform
 - Traversal
 - UnderlineAnnotation
 - Version
-- ViewerPreferences
 - WebClient
-- Whitespace
 - WsdlAddress
-- WsdlConnection
-- Xdc
 - Xdp
-- XRefEntryException
 - Xsl
 - Zpl
-- ResponseException
-- ScriptModel
 - Severity
-- SquigglyAnnotation
 - StartNode
-- StringObject
 - SuppressBanner
-- Tagged
 - Token
 - Trace
 - Type
 - TypeFace
 - TypeFaces
-- Uri
 - ValidationMessaging
-- XmlConnection
 
 ## God Nodes (most connected - your core abstractions)
 1. `warn()` - 168 edges
@@ -402,11 +385,11 @@
 ## Import Cycles
 - None detected.
 
-## Communities (363 total, 267 thin omitted)
+## Communities (344 total, 251 thin omitted)
 
 ### Community 0 - "pdf.worker.min.mjs"
 Cohesion: 0.01
-Nodes (269): Aa, AbortException, Acrobat, Acrobat7, ADBE_JSConsole, AddSilentPrint, AdjustData, af (+261 more)
+Nodes (279): Aa, AbortException, Acrobat, Acrobat7, ADBE_JSConsole, AdjustData, af, Agent (+271 more)
 
 ### Community 1 - "kokoro.web.js"
 Cohesion: 0.06
@@ -418,23 +401,27 @@ Nodes (8): $(), B, I, layoutText(), P, TextMeasure, A(), A()
 
 ### Community 5 - "pdf.min.mjs"
 Cohesion: 0.02
-Nodes (83): AbortException, AnnotationElementFactory, At, b, CaretAnnotationElement, CheckboxWidgetAnnotationElement, ChoiceWidgetAnnotationElement, computeLuminance() (+75 more)
+Nodes (71): AbortException, At, b, BaseSVGFactory, computeLuminance(), contrastRatio(), createValidAbsoluteUrl(), CSS_FONT_INFO (+63 more)
 
 ### Community 6 - ".get"
-Cohesion: 0.06
-Nodes (9): Annotation, fetchDest(), fonts_Glyph, getPdfColorArray(), getQuadPoints(), getRgbColor(), MarkupAnnotation, PopupAnnotation (+1 more)
+Cohesion: 0.09
+Nodes (3): Annotation, MarkupAnnotation, PopupAnnotation
 
 ### Community 8 - "getStringOption"
 Cohesion: 0.02
-Nodes (57): AppearanceFilter, Barcode, BatchOutput, Bind, Calculate, Certificates, Color, Compress (+49 more)
+Nodes (53): AppearanceFilter, BatchOutput, Bind, Calculate, Certificates, Color, Compress, Connect (+45 more)
 
 ### Community 10 - "s"
 Cohesion: 0.08
 Nodes (29): addToExternrefTable0(), cachedTextDecoder, cachedTextEncoder, decodeText(), getArrayF32FromWasm0(), getArrayJsValueFromWasm0(), getArrayU32FromWasm0(), getArrayU8FromWasm0() (+21 more)
 
+### Community 11 - ".push"
+Cohesion: 0.06
+Nodes (11): compareTextLayers(), DrawingOptions, DrawLayer, DrawnSignatureOptions, getTextLayer(), HighlightDrawingOptions, InkDrawingOptions, isPointBefore() (+3 more)
+
 ### Community 12 - ".getOperatorList"
 Cohesion: 0.05
-Nodes (20): addCachedImageOps(), AppearanceStreamEvaluator, fetchBinaryData(), getColorConversionBatchSize(), getStandardFontName(), getTilingPatternIR(), getXfaFontDict(), getXfaFontName() (+12 more)
+Nodes (21): addCachedImageOps(), adjustWidths(), amendFallbackToUnicode(), argIsDict(), CheckedOperatorList, fetchBinaryData(), getColorConversionBatchSize(), getStandardFontName() (+13 more)
 
 ### Community 13 - "_call"
 Cohesion: 0.05
@@ -445,92 +432,100 @@ Cohesion: 0.06
 Nodes (6): InitInput, InitOutput, Model, Preparer, SyncInitInput, wbg_rayon_PoolBuilder
 
 ### Community 15 - ".getRaw"
-Cohesion: 0.07
-Nodes (12): _collectJS(), deepCompare(), getSoundFormat(), isName(), isRefsEqual(), makeArr(), NameOrNumberTree, stringToPDFString() (+4 more)
+Cohesion: 0.05
+Nodes (20): adjustMapping(), _collectAction(), collectActions(), _collectJS(), deepCompare(), fetchDest(), fetchRemoteDest(), FileSpec (+12 more)
 
 ### Community 16 - "ort-wasm-simd-threaded.jsep.mjs"
 Cohesion: 0.12
 Nodes (14): K, CHUNKS, GpuCodec, encode(), halves(), parseGguf(), ST, bits() (+6 more)
 
 ### Community 17 - "warn"
-Cohesion: 0.03
-Nodes (24): addChildren(), adjustMapping(), AnnotationFactory, compileCharString(), CompiledFont, compileGlyf(), createDataNode(), Ga() (+16 more)
+Cohesion: 0.05
+Nodes (15): AnnotationFactory, compileCharString(), compileGlyf(), createDataNode(), decodeString(), isDefaultDecodeHelper(), isDict(), normalizeBlendMode() (+7 more)
 
 ### Community 18 - ".add"
 Cohesion: 0.03
-Nodes (14): AltText, CircleAnnotationElement, ColorManager, FileAttachmentAnnotationElement, FreeHighlightOutliner, getRGB(), getRGBA(), LineAnnotationElement (+6 more)
+Nodes (27): AnnotationElement, AnnotationElementFactory, CaretAnnotationElement, CheckboxWidgetAnnotationElement, ChoiceWidgetAnnotationElement, CircleAnnotationElement, FileAttachmentAnnotationElement, FreeTextAnnotationElement (+19 more)
 
 ### Community 20 - ".has"
-Cohesion: 0.03
-Nodes (13): Catalog, clearGlobalCaches(), ColorSpaceUtils, EvaluatorPreprocessor, FeatureTest, fetchRemoteDest(), info(), InfoUtils (+5 more)
+Cohesion: 0.04
+Nodes (11): AppearanceStreamEvaluator, Catalog, ColorSpaceUtils, createValidAbsoluteUrl(), EvaluatorPreprocessor, FeatureTest, fonts_Glyph, info() (+3 more)
 
 ### Community 21 - "getMeasurement"
-Cohesion: 0.03
-Nodes (27): addHTML(), Area, Border, CheckButton, ContentArea, Corner, createLine(), Draw (+19 more)
+Cohesion: 0.04
+Nodes (15): addHTML(), Area, Border, ContentArea, createLine(), ExclGroup, flushHTML(), getAvailableSpace() (+7 more)
 
 ### Community 22 - "i"
 Cohesion: 0.12
 Nodes (30): chooseDevice(), isGguf(), settleDevice(), seed32(), hasRelaxedSimd(), RELAXED_SIMD_PROBE, chooseThreads(), cancelled (+22 more)
 
 ### Community 23 - "shadow"
-Cohesion: 0.09
-Nodes (5): ColorScheme, FeatureTest, InfoUtils, shadow(), XfaLayer
+Cohesion: 0.05
+Nodes (11): assert(), ColorScheme, CssFontInfo, FeatureTest, FontInfo, InfoUtils, PageViewport, readString() (+3 more)
 
 ### Community 24 - "getInteger"
-Cohesion: 0.04
-Nodes (25): Arc, Break, BreakAfter, BreakBefore, ChoiceList, Comb, config_Area, DayNames (+17 more)
+Cohesion: 0.03
+Nodes (31): Arc, Barcode, Break, BreakAfter, BreakBefore, ChoiceList, Comb, config_Area (+23 more)
 
 ### Community 26 - "PsWasmCompiler"
-Cohesion: 0.11
-Nodes (7): encodeASCIIString(), PsJsCompiler, PSStackToTree, PsWasmCompiler, section(), unsignedLEB128(), vec()
+Cohesion: 0.08
+Nodes (9): encodeASCIIString(), PsArgNode, PsJsCompiler, PSStackToTree, PsWasmCompiler, section(), unsignedLEB128(), vec() (+1 more)
+
+### Community 27 - ".remove"
+Cohesion: 0.07
+Nodes (3): ImageManager, StampEditor, X
 
 ### Community 28 - "warn"
-Cohesion: 0.05
-Nodes (10): closeFrame(), FontLoader, i, KeyboardManager, LinkAnnotationElement, makeArr(), makeMap(), PDFObjects (+2 more)
+Cohesion: 0.08
+Nodes (6): FontLoader, KeyboardManager, makeArr(), makePathFromDrawOPS(), StatTimer, warn()
 
 ### Community 29 - "calculateSHA512"
-Cohesion: 0.05
-Nodes (20): AES128Cipher, AES256Cipher, AESBaseCipher, ARCFourCipher, calculateMD5(), calculateSHA384(), calculateSHA512(), ch() (+12 more)
+Cohesion: 0.06
+Nodes (19): AES128Cipher, AES256Cipher, AESBaseCipher, ARCFourCipher, calculateMD5(), calculateSHA384(), calculateSHA512(), ch() (+11 more)
 
 ### Community 30 - ".push"
-Cohesion: 0.16
-Nodes (7): buildPostScriptWasmFunction(), interpolate(), parsePostScriptFunction(), PDFFunction, PDFFunctionFactory, setArity(), toNumberArray()
+Cohesion: 0.13
+Nodes (8): buildPostScriptWasmFunction(), CFFFont, interpolate(), n, parsePostScriptFunction(), PDFFunction, setArity(), toNumberArray()
 
 ### Community 32 - ".setIfName"
 Cohesion: 0.06
-Nodes (18): codePointIter(), ErrorFont, escapeString(), FakeUnicodeFont, FreeTextAnnotation, getPdfColor(), getTransformMatrix(), HighlightAnnotation (+10 more)
+Nodes (20): codePointIter(), createImage(), createImageDict(), ErrorFont, escapeString(), FakeUnicodeFont, FreeTextAnnotation, getPdfColor() (+12 more)
 
 ### Community 33 - "PDFPageProxy"
 Cohesion: 0.06
-Nodes (6): getReadableStream(), InternalRenderTask, makeObj(), PDFNodeStreamRangeReader, PDFPageProxy, XfaText
+Nodes (5): BasePDFStream, InternalRenderTask, makeObj(), PDFPageProxy, XfaText
 
 ### Community 34 - ".success"
-Cohesion: 0.07
-Nodes (28): applyAssist(), ariaLabel(), Br, Caption, checkDimensions(), computeBbox(), createWrapper(), fixDimensions() (+20 more)
+Cohesion: 0.04
+Nodes (40): applyAssist(), ariaLabel(), Br, Caption, CheckButton, checkDimensions(), computeBbox(), Corner (+32 more)
 
 ### Community 35 - "PDFNetworkStreamReader"
-Cohesion: 0.06
-Nodes (17): BaseBinaryDataFactory, createHeaders(), createResponseError(), DOMBinaryDataFactory, ensureResponseOrigin(), ensureResponseStatus(), extractFilenameFromHeader(), fetchUrl() (+9 more)
+Cohesion: 0.04
+Nodes (22): BaseBinaryDataFactory, createHeaders(), createResponseError(), ensureResponseOrigin(), ensureResponseStatus(), extractFilenameFromHeader(), fetchUrl(), getArrayBuffer() (+14 more)
 
 ### Community 36 - "Comment"
-Cohesion: 0.06
-Nodes (7): EditorToolbar, FloatingToolbar, preventDefault(), stopEvent(), stopTouchEvent(), TouchManager, X
+Cohesion: 0.07
+Nodes (8): closeFrame(), getWorkerSrc(), HighlightOutliner, LoopbackPort, PDFWorker, RendererWorker, setAnnotationCanvasName(), WorkerRenderTask
 
 ### Community 37 - "app.js"
 Cohesion: 0.07
 Nodes (38): adjacentBlock(), aiReady, blockOf, buildVoiceMenu(), chunkBlock(), cleanForSpeech(), detectBlocks(), els (+30 more)
 
 ### Community 38 - "PDFEditor"
-Cohesion: 0.04
-Nodes (23): computeIDs(), createImage(), createImageDict(), encodeToXmlString(), escapePDFName(), getIndexes(), getNewAnnotationsMap(), incrementalUpdate() (+15 more)
+Cohesion: 0.05
+Nodes (27): computeIDs(), encodeToXmlString(), escapePDFName(), Ga(), generateFont(), getFamilyName(), getFontSubstitution(), getIndexes() (+19 more)
 
 ### Community 39 - "unreachable"
-Cohesion: 0.06
-Nodes (6): BasePDFStreamRangeReader, BasePDFStreamReader, BaseShadingPattern, getUuid(), PrintAnnotationStorage, unreachable()
+Cohesion: 0.04
+Nodes (10): BasePDFStreamRangeReader, BasePDFStreamReader, BaseShadingPattern, getUuid(), info(), OptionalContentConfig, OptionalContentGroup, Outline (+2 more)
+
+### Community 40 - ".updateProperties"
+Cohesion: 0.10
+Nodes (4): CurrentPointers, stopEvent(), stopTouchEvent(), TouchManager
 
 ### Community 41 - "DrawingEditor"
 Cohesion: 0.03
-Nodes (10): compareTextLayers(), ContourDrawOutline, DrawingEditor, DrawingOptions, DrawLayer, DrawnSignatureOptions, HighlightDrawingOptions, InkDrawingOptions (+2 more)
+Nodes (5): bindEvents(), ContourDrawOutline, DrawingEditor, p, SignatureEditor
 
 ### Community 42 - "XMLParserBase"
 Cohesion: 0.06
@@ -541,60 +536,60 @@ Cohesion: 0.05
 Nodes (4): CanvasBBoxTracker, CommandManager, e, expandBBox()
 
 ### Community 45 - ".addEventListener"
-Cohesion: 0.06
-Nodes (7): AnnotationElement, AnnotationStorage, LoopbackPort, MediaAnnotationElement, TextWidgetAnnotationElement, Ut, WidgetAnnotationElement
+Cohesion: 0.09
+Nodes (6): Dict, getModificationDate(), stringToAsciiOrUTF16BE(), stringToUTF16String(), StructTreeRoot, XRefWrapper
 
 ### Community 47 - "unreachable"
-Cohesion: 0.04
-Nodes (10): BasePdfManager, BasePDFStreamRangeReader, BasePDFStreamReader, BaseShading, BaseStream, Pattern, PatternCS, RadialAxialShading (+2 more)
+Cohesion: 0.10
+Nodes (5): BaseShading, BaseStream, Pattern, RadialAxialShading, unreachable()
 
 ### Community 49 - ".slice"
 Cohesion: 0.13
 Nodes (31): _l, attention(), attentionByKey(), attentionBySlice(), codecIn(), finish(), gemm(), gemmCache (+23 more)
 
 ### Community 50 - ".render"
-Cohesion: 0.07
-Nodes (4): AnnotationLayer, InkAnnotationElement, setLayerDimensions(), TextLayerImages
+Cohesion: 0.06
+Nodes (6): AnnotationLayer, EditorAnnotationElement, percentage(), setLayerDimensions(), TextLayer, TextLayerImages
 
 ### Community 51 - ".checkAndRepair"
-Cohesion: 0.08
-Nodes (21): adjustWidths(), amendFallbackToUnicode(), buildMapping(), cn, createCmapTable(), createNameTable(), createOS2Table(), createPostscriptName() (+13 more)
+Cohesion: 0.19
+Nodes (8): createCmapTable(), createNameTable(), createOS2Table(), createPostscriptName(), createPostTable(), DataBuilder, getUnicodeRangeFor(), OpenTypeFileBuilder
 
 ### Community 53 - "getCurrentTransform"
-Cohesion: 0.13
-Nodes (5): CanvasImagesTracker, getCurrentTransform(), makePathFromDrawOPS(), resetCtxToDefault(), TilingPattern
+Cohesion: 0.14
+Nodes (3): getCurrentTransform(), resetCtxToDefault(), TilingPattern
+
+### Community 54 - "AnnotationElement"
+Cohesion: 0.06
+Nodes (10): addChildren(), clearGlobalCaches(), getXfaFontDict(), getXfaFontName(), ir, ObjectLoader, PDFDocument, StreamsSequenceStream (+2 more)
 
 ### Community 57 - ".getUint16"
-Cohesion: 0.07
-Nodes (13): buildHuffmanTable(), CompositeGlyph, D, decodeScan(), findNextFileMarker(), GlyfTable, Glyph, GlyphHeader (+5 more)
+Cohesion: 0.09
+Nodes (5): CompositeGlyph, GlyfTable, Glyph, GlyphHeader, SimpleGlyph
 
 ### Community 58 - "assert"
-Cohesion: 0.14
-Nodes (4): convertBlackAndWhiteToRGBA(), convertToRGBA(), ImageResizer, JBig2CCITTFaxImage
+Cohesion: 0.23
+Nodes (3): convertBlackAndWhiteToRGBA(), convertToRGBA(), ImageResizer
 
 ### Community 61 - "find"
-Cohesion: 0.13
-Nodes (10): find(), FontFinder, FontInfo, getCurrentPara(), makeObj(), PageSet, selectFont(), serializeFontFamily() (+2 more)
+Cohesion: 0.10
+Nodes (10): find(), FontFinder, FontInfo, getCurrentPara(), makeObj(), selectFont(), serializeFontFamily(), setFontFamily() (+2 more)
 
-### Community 65 - ".getByte"
-Cohesion: 0.16
-Nodes (3): Cmd, FlateStream, Parser
+### Community 62 - ".isEmpty"
+Cohesion: 0.08
+Nodes (3): AnnotationStorage, FakeEditor, MurmurHash3_64
 
 ### Community 67 - ".getObj"
-Cohesion: 0.14
-Nodes (15): createBuiltInCMap(), expectInt(), expectString(), extendCMap(), IdentityCMap, isCmd(), parseBfChar(), parseBfRange() (+7 more)
+Cohesion: 0.08
+Nodes (22): addHex(), BinaryCMapReader, BinaryCMapStream, Cmd, createBuiltInCMap(), expectInt(), expectString(), extendCMap() (+14 more)
 
 ### Community 68 - ".setupMessageHandler"
 Cohesion: 0.10
-Nodes (8): assert(), dataObj(), endRequests(), MessageHandler, ObjectHandler, PatternInfo, StatTimer, wrapReason()
+Nodes (7): dataObj(), endRequests(), MessageHandler, ObjectHandler, PatternInfo, PDFObjects, wrapReason()
 
 ### Community 70 - "valueToHtml"
-Cohesion: 0.06
-Nodes (9): BooleanElement, DateElement, DateTime, Decimal, Float, Integer, Text, Time (+1 more)
-
-### Community 71 - "stopEvent"
-Cohesion: 0.12
-Nodes (7): ButtonWidgetAnnotation, ChoiceWidgetAnnotation, _collectAction(), collectActions(), decodeString(), getInheritableProperty(), parseXFAPath()
+Cohesion: 0.07
+Nodes (8): BooleanElement, DateElement, DateTime, Decimal, Float, Integer, Time, valueToHtml()
 
 ### Community 72 - ".from_pretrained"
 Cohesion: 0.07
@@ -605,24 +600,28 @@ Cohesion: 0.07
 Nodes (5): InitInput, InitOutput, Model, Preparer, SyncInitInput
 
 ### Community 74 - ".restore"
-Cohesion: 0.18
-Nodes (5): copyCtxState(), drawImageAtIntegerCoords(), getCurrentTransformInverse(), getImageSmoothingEnabled(), putBinaryImageMask()
+Cohesion: 0.13
+Nodes (7): convertBlackAndWhiteToRGBA(), drawImageAtIntegerCoords(), getCurrentTransformInverse(), getImageSmoothingEnabled(), putBinaryImageData(), putBinaryImageMask(), TransferMapsFallback
 
 ### Community 75 - ".extractFontProgram"
 Cohesion: 0.16
 Nodes (8): decrypt(), findBlock(), isHexDigit(), isSpecial(), isWhiteSpace(), Lexer, toHexDigit(), Type1Parser
 
+### Community 77 - "ColorPicker"
+Cohesion: 0.04
+Nodes (5): ColorPicker, Comment, EditorToolbar, FloatingToolbar, noContextMenu()
+
 ### Community 78 - "InkDrawOutliner"
-Cohesion: 0.15
+Cohesion: 0.16
 Nodes (4): InkDrawOutliner, lineToSVGPath(), pushCurves(), svgPoint()
 
 ### Community 79 - "ke"
-Cohesion: 0.15
-Nodes (4): Dict, getModificationDate(), stringToAsciiOrUTF16BE(), stringToUTF16String()
+Cohesion: 0.10
+Nodes (3): getNewAnnotationsMap(), PDFEditor, writeObject()
 
 ### Community 80 - ".parse"
-Cohesion: 0.09
-Nodes (9): BaseLocalCache, CFFDict, CFFFDSelect, CFFParser, CFFPrivateDict, CFFTopDict, looksLikeUnsigned16BitNegative(), parseIndex() (+1 more)
+Cohesion: 0.05
+Nodes (13): BaseLocalCache, CFFCompiler, CFFDict, CFFFDSelect, CFFOffsetTracker, CFFParser, CFFPrivateDict, CFFStrings (+5 more)
 
 ### Community 81 - "FontFaceObject"
 Cohesion: 0.08
@@ -633,124 +632,104 @@ Cohesion: 0.11
 Nodes (3): AlternateCS, ColorSpace, DeviceRgbaCS
 
 ### Community 83 - ".startDrawing"
-Cohesion: 0.15
-Nodes (11): disposedError(), isUrl(), LANGS, PhononTTS, resolveModel(), resolveUrl(), RULES, toSeed() (+3 more)
+Cohesion: 0.17
+Nodes (5): disposedError(), PhononTTS, toSeed(), concatPcm(), encodeWav()
 
 ### Community 84 - ".constructor"
-Cohesion: 0.18
-Nodes (5): buildMeshVertexData(), FunctionBasedShading, getB(), MeshShading, MeshStreamReader
+Cohesion: 0.25
+Nodes (3): getB(), MeshShading, MeshStreamReader
 
 ### Community 87 - "MessageHandler"
-Cohesion: 0.11
-Nodes (5): BasePDFStream, MessageHandler, PDFWorkerStreamRangeReader, PDFWorkerStreamReader, wrapReason()
+Cohesion: 0.10
+Nodes (7): assert(), BasePDFStream, MessageHandler, PDFWorkerStreamRangeReader, PDFWorkerStreamReader, toRomanNumerals(), wrapReason()
 
 ### Community 88 - "InkEditor"
 Cohesion: 0.15
 Nodes (3): ChunkRun, GpuEngine, GpuLM
 
 ### Community 89 - "ColorConverters"
-Cohesion: 0.14
-Nodes (5): applyOpacity(), ColorConverters, makeColorComp(), MathClamp(), scaleAndClamp()
+Cohesion: 0.13
+Nodes (6): applyOpacity(), ColorConverters, convertRGBToRGBA(), makeColorComp(), MathClamp(), scaleAndClamp()
 
 ### Community 92 - "PDFDataRangeTransport"
-Cohesion: 0.12
-Nodes (4): PDFDataRangeTransport, PDFDataTransportStream, PDFDataTransportStreamRangeReader, transport_stream_getArrayBuffer()
+Cohesion: 0.11
+Nodes (5): PDFDataRangeTransport, PDFDataTransportStream, PDFDataTransportStreamRangeReader, PDFNetworkStream, transport_stream_getArrayBuffer()
 
 ### Community 93 - ".#f"
-Cohesion: 0.10
-Nodes (4): CalGrayCS, CalRGBCS, DeviceCmykCS, LabCS
+Cohesion: 0.13
+Nodes (3): CalGrayCS, DeviceCmykCS, LabCS
 
 ### Community 94 - "OptionalContentConfig"
-Cohesion: 0.13
-Nodes (3): info(), OptionalContentConfig, OptionalContentGroup
-
-### Community 100 - "ChunkedStreamManager"
-Cohesion: 0.11
-Nodes (7): getArrayBuffer(), PDFDataTransportStreamReader, PDFFetchStream, PDFFetchStreamRangeReader, PDFFetchStreamReader, PDFNodeStream, PDFNodeStreamReader
+Cohesion: 0.22
+Nodes (8): buildHuffmanTable(), D, decodeScan(), findNextFileMarker(), JpxImage, prepareComponents(), readDataBlock(), skipData()
 
 ### Community 103 - "ChunkedStream"
 Cohesion: 0.11
 Nodes (3): arrayBuffersToBytes(), ChunkedStream, ChunkedStreamManager
 
-### Community 105 - ".paintInlineImageXObject"
-Cohesion: 0.20
-Nodes (3): drawTriangle(), MeshShadingPattern, TransferMapsFallback
-
-### Community 106 - ".process"
-Cohesion: 0.20
-Nodes (6): addHex(), BinaryCMapReader, BinaryCMapStream, hexToInt(), hexToStr(), incHex()
-
 ### Community 107 - ".ensureBuffer"
-Cohesion: 0.06
-Nodes (8): Ascii85Stream, AsciiHexStream, DecodeStream, DecryptStream, JpxStream, PredictorStream, RunLengthStream, StreamsSequenceStream
+Cohesion: 0.12
+Nodes (5): Ascii85Stream, AsciiHexStream, LZWStream, PredictorStream, RunLengthStream
 
 ### Community 108 - "MathClamp"
-Cohesion: 0.22
-Nodes (5): assert(), PDFImage, sumOpaqueRow(), sumTransparentRow(), toRomanNumerals()
+Cohesion: 0.25
+Nodes (3): PDFImage, sumOpaqueRow(), sumTransparentRow()
 
 ### Community 110 - ".fallbackToSystemFont"
-Cohesion: 0.25
-Nodes (8): applyStandardFontGlyphMap(), buildToFontChar(), fs, getUnicodeForGlyph(), Gn, hn, recoverGlyphName(), zn
-
-### Community 111 - "Type1Font"
-Cohesion: 0.13
-Nodes (5): BrotliStream, bytesToString(), getFontFileType(), isTrueTypeCollectionFile(), Type1Font
+Cohesion: 0.14
+Nodes (15): buildMapping(), buildToFontChar(), bytesToString(), cn, getEncoding(), getFontFileType(), getUnicodeForGlyph(), int16() (+7 more)
 
 ### Community 114 - "Font"
-Cohesion: 0.10
-Nodes (8): Builder, convertCidString(), Font, FontRendererFactory, n, parseCff(), un, yn
+Cohesion: 0.16
+Nodes (6): convertCidString(), Font, FontRendererFactory, parseCff(), un, yn
 
 ### Community 119 - "DecodeStream"
 Cohesion: 0.20
 Nodes (13): GGML, safetensorsOf(), tensorBytes(), TYPE_SIZE, Blob, buildCodec(), buildWeights(), cat() (+5 more)
 
 ### Community 122 - "._createRasterPattern"
-Cohesion: 0.21
-Nodes (3): applyBoundingBox(), CanvasExtraState, RadialAxialShadingPattern
+Cohesion: 0.31
+Nodes (3): applyBoundingBox(), FreeHighlightOutliner, RadialAxialShadingPattern
 
 ### Community 124 - "BBoxReader"
 Cohesion: 0.13
 Nodes (3): BBoxReader, DispatchBuilder, P_FIELDS
 
-### Community 125 - "BasePDFStreamReader"
-Cohesion: 0.16
-Nodes (3): FileSpec, MediaAnnotation, RichMediaAnnotation
-
 ### Community 126 - "calculateSHA256"
 Cohesion: 0.27
 Nodes (9): calculate_sha256_ch(), calculate_sha256_littleSigma(), calculate_sha256_littleSigmaPrime(), calculate_sha256_maj(), calculate_sha256_sigma(), calculate_sha256_sigmaPrime(), calculateSHA256(), PDF17 (+1 more)
 
-### Community 127 - "CFFDict"
-Cohesion: 0.16
-Nodes (3): CssFontInfo, readString(), SystemFontInfo
-
 ### Community 128 - "IccColorSpace"
-Cohesion: 0.22
-Nodes (7): ca, fetchSync(), getUint8ArrayMemory0(), passArray8ToWasm0(), qcms_convert_array(), __wbg_finalize_init(), __wbg_get_imports()
+Cohesion: 0.14
+Nodes (9): ca, CmykICCBasedCS, fetchSync(), getUint8ArrayMemory0(), IccColorSpace, passArray8ToWasm0(), qcms_convert_array(), __wbg_finalize_init() (+1 more)
 
 ### Community 131 - "CanvasExtraState"
 Cohesion: 0.11
 Nodes (9): Lang, LoadOptions, LoadProgress, ModelSpec, PhononTTS, Quant, SpeechOptions, SpeechStats (+1 more)
 
 ### Community 137 - ".[lf]"
-Cohesion: 0.25
-Nodes (5): a, Button, createValidAbsoluteUrl(), fixURL(), recoverJsURL()
+Cohesion: 0.29
+Nodes (4): a, Button, fixURL(), recoverJsURL()
 
 ### Community 139 - "BasePDFStream"
 Cohesion: 0.13
 Nodes (3): getHighlightFocusSVGProperties(), getHighlightSVGProperties(), HighlightOutline
+
+### Community 153 - "CFFStrings"
+Cohesion: 0.50
+Nodes (3): createPNGLikeImage(), createRawImage(), paethPredictor()
 
 ### Community 156 - "PSStackBasedInterpreter"
 Cohesion: 0.33
 Nodes (4): IndexedCS, MathClamp(), PSStackBasedInterpreter, sumPreblendedRow()
 
 ### Community 157 - "Handler"
-Cohesion: 0.12
-Nodes (13): Exception, ApiError, Claude, Handler, parse_json_answer(), Everything that calls the Claude API. One instance, shared by request threads., Check a key against the API and, if it works, keep it in .env for next time., Upload a document to Claude's file store once; later requests refer to it by id. (+5 more)
+Cohesion: 0.11
+Nodes (15): Exception, ApiError, Claude, Handler, parse_json_answer(), Everything that calls the Claude API. One instance, shared by request threads., Check a key against the API and, if it works, keep it in .env for next time., Upload a document to Claude's file store once; later requests refer to it by id. (+7 more)
 
 ### Community 158 - ".convert"
-Cohesion: 0.29
-Nodes (9): clearCache(), fetchBytes(), openCache(), readBody(), storeBytes(), parseHubModel(), resolveHubModel(), VOICE_DIRS (+1 more)
+Cohesion: 0.20
+Nodes (15): clearCache(), fetchBytes(), openCache(), readBody(), storeBytes(), parseHubModel(), resolveHubModel(), VOICE_DIRS (+7 more)
 
 ### Community 161 - "createPNGLikeImage"
 Cohesion: 0.33
@@ -764,9 +743,9 @@ Nodes (5): ai, AiError, MESSAGES, post(), postJson()
 Cohesion: 0.33
 Nodes (6): chunkRects(), reveal(), sentencePath(), setActive(), widthFraction(), f
 
-### Community 187 - "PsArgNode"
-Cohesion: 0.10
-Nodes (3): PsArgNode, XFAFactory, XhtmlNamespace
+### Community 208 - "AdjustData"
+Cohesion: 0.15
+Nodes (5): BasicColorPicker, ColorManager, CSSConstants, getRGB(), getRGBA()
 
 ### Community 217 - "CFFEncoding"
 Cohesion: 0.50
@@ -775,22 +754,22 @@ Nodes (3): renderCaption(), renderPlayer(), spoken()
 ## Knowledge Gaps
 - **279 isolated node(s):** `MESSAGES`, `els`, `SPEEDS`, `settings`, `ruler` (+274 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **267 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **251 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `D` connect `.getUint16` to `pdf.worker.min.mjs`, `CanvasNestedDependencyTracker`, `.getOperatorList`, `calculateSHA512`?**
-  _High betweenness centrality (0.310) - this node is a cross-community bridge._
-- **Why does `CanvasGraphics` connect `CanvasGraphics` to `pdf.min.mjs`, `unreachable`, `.paintInlineImageXObject`, `.restore`, `getCurrentTransform`, `.getByRef`, `CanvasNestedDependencyTracker`, `warn`?**
-  _High betweenness centrality (0.171) - this node is a cross-community bridge._
-- **Why does `AnnotationEditor` connect `AnnotationEditor` to `Comment`, `pdf.min.mjs`, `AnnotationEditorUIManager`, `unreachable`, `DrawingEditor`, `FreeTextEditor`, `.render`, `AnnotationEditorLayer`, `.add`, `getCurrentTransform`, `shadow`, `.remove`, `warn`, `.isEmpty`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
+- **Why does `D` connect `OptionalContentConfig` to `pdf.worker.min.mjs`, `calculateSHA512`, `.getOperatorList`, `getCurrentTransform`?**
+  _High betweenness centrality (0.309) - this node is a cross-community bridge._
+- **Why does `CanvasGraphics` connect `CanvasGraphics` to `pdf.min.mjs`, `unreachable`, `.restore`, `getCurrentTransform`, `CFFCompiler`, `._createRasterPattern`, `CanvasNestedDependencyTracker`, `warn`?**
+  _High betweenness centrality (0.182) - this node is a cross-community bridge._
+- **Why does `AnnotationEditor` connect `AnnotationEditor` to `pdf.min.mjs`, `AnnotationEditorUIManager`, `unreachable`, `DrawingEditor`, `.push`, `ColorPicker`, `FreeTextEditor`, `.render`, `AnnotationEditorLayer`, `getCurrentTransform`, `shadow`, `.remove`, `.isEmpty`, `HighlightEditor`?**
+  _High betweenness centrality (0.062) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `ConfigNamespace` (e.g. with `pdf.worker.min.mjs` and `.[uf]()`) actually correct?**
   _`ConfigNamespace` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `MESSAGES`, `els`, `SPEEDS` to the rest of the system?**
-  _286 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _288 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `pdf.worker.min.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.005757769097897636 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.005414244685382913 - nodes in this community are weakly interconnected._
 - **Should `kokoro.web.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05750658472344162 - nodes in this community are weakly interconnected._

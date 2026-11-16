@@ -961,7 +961,7 @@ const speaker = {
 
   async explain(block) {
     if (!ai.available) {
-      if (ai.reason === 'no_key') openKeyDialog(); else toast('Claude is off: start the reader with “uv run serve.py”.');
+      if (ai.reason === 'no_key') openKeyDialog(); else toast(ai.offMessage, 6000);
       return;
     }
     this.start(block, 'explain');
@@ -1341,7 +1341,7 @@ function renderChip() {
   if (!ai.available) {
     state = 'off';
     text = ai.reason === 'no_key' ? 'Connect Claude' : 'Claude off';
-    title = ai.reason === 'no_key' ? 'Add an Anthropic API key to turn on Claude.' : 'Start the reader with “uv run serve.py” to use Claude.';
+    title = ai.reason === 'no_key' ? 'Add an Anthropic API key to turn on Claude.' : ai.offMessage;
   } else if (!settings.ai) {
     state = 'off'; text = 'Claude off'; title = 'Click to have Claude prepare formulas and notation for reading aloud.';
   } else if (ai.doc?.state === 'error') {
@@ -1445,7 +1445,7 @@ els.voiceMenu.addEventListener('toggle', (e) => {
 
 els.aiChip.addEventListener('click', () => {
   if (!ai.available) {
-    if (ai.reason === 'no_key') openKeyDialog(); else toast('Claude is off: start the reader with “uv run serve.py”.', 6000);
+    if (ai.reason === 'no_key') openKeyDialog(); else toast(ai.offMessage, 8000);
     return;
   }
   if (settings.ai && ai.doc?.state === 'error') { startClaude(); return; }

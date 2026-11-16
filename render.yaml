@@ -1,0 +1,17 @@
+# Render blueprint: one web service that serves the page and talks to Claude.
+# In the Render dashboard choose New > Blueprint and pick this repository.
+services:
+  - type: web
+    name: reader
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python serve.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.14
+      - key: ANTHROPIC_API_KEY
+        sync: false # Render asks for it when the blueprint is created
+      - key: READER_PASSWORD
+        generateValue: true # read it afterwards under Environment in the dashboard
