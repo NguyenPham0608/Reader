@@ -9,7 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.min.mjs';
 const $ = (id) => document.getElementById(id);
 const els = {
   bar: $('bar'), docTitle: $('docTitle'), pageInd: $('pageInd'), welcome: $('welcome'), pages: $('pages'),
-  player: $('player'), playBtn: $('playBtn'), nowText: $('nowText'), nowSub: $('nowSub'), retryBtn: $('retryBtn'),
+  player: $('player'), playBtn: $('playBtn'), retryBtn: $('retryBtn'),
   prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
@@ -192,11 +192,86 @@ function buildBlock(lines) {
   // The block's type size is that of the line carrying most of its text (not a stray formula fragment).
   const main = lines.reduce((a, b) => (b.text.length > a.text.length ? b : a));
   return {
-    text, spans, size: main.size,
+    text, spans, lines, size: main.size, font: main.font,
     x0: Math.min(...lines.map((l) => l.x0)), x1: Math.max(...lines.map((l) => l.x1)),
     top: Math.min(...lines.map((l) => l.top)), bottom: Math.max(...lines.map((l) => l.bottom)),
   };
 }
+
+// ── Paragraphs that carry on in the next column or on the next page ─────────
+// The page gives each column's and each page's share of a paragraph as its own block. Blocks
+// that are really one paragraph are linked (`next` / `prev`) and then selected, highlighted and
+// read as one, with the sentence that straddles the break spoken in a single breath.
+
+const BODY = new Set(['', 'paragraph', 'list']);
+const PASSABLE = new Set(['skip', 'caption', 'table', 'footnote', 'other']);
+const SENTENCE_OVER = /[.!?:…]["'”’)\]]*\d{0,3}$/u; // allows a footnote mark after the full stop
+const HYPHEN_END = /\p{L}[-\u00AD\u2010]$/u;
+
+/** Whether a stretch of text reads as running prose rather than a formula, a table row or a label. */
+function prose(text) {
+  const tokens = text.trim().split(/\s+/);
+  const words = tokens.filter((t) => /^[(“"‘']*\p{L}[\p{L}'’-]+[.,;:!?)”"’']*$/u.test(t));
+  return tokens.length >= 3 && words.length >= tokens.length / 2;
+}
+
+/** Whether block `b` picks up the paragraph that block `a` leaves unfinished. */
+function continues(a, b) {
+  if (!BODY.has(a.kind) || !BODY.has(b.kind) || a.skip || b.skip) return false;
+  if (Math.abs(a.size - b.size) > 0.06 * a.size || a.font !== b.font) return false;
+  // On the same page the rest must start a new column: to the right, and higher up than where this ends.
+  if (b.page === a.page && !(b.x0 > (a.x0 + a.x1) / 2 && b.top < a.bottom)) return false;
+  const end = a.text.trimEnd(), start = b.text.trimStart();
+  if (end.length < 25 || SENTENCE_OVER.test(end)) return false;
+  if (!prose(end.slice(-80)) || !prose(start.slice(0, 80)) || /^(?:fig|table|scheme)\b/i.test(start)) return false;
+  if (HYPHEN_END.test(end)) return /^\p{L}/u.test(start);
+  if (/^\p{Ll}/u.test(start) || /[,;–—(]$/.test(end)) return true;
+  // A capital can still carry a sentence on (a name, say): trust it when the last line ran to
+  // the edge of its column and the next block doesn't open with an indent.
+  const lastLine = a.lines[a.lines.length - 1];
+  return /^\p{Lu}/u.test(start) && a.lines.length > 2 && b.lines.length > 1 && end.length > 200 && start.length > 80
+    && lastLine.x1 > a.x1 - 1.5 * a.size && b.lines[0].x0 < b.x0 + 0.5 * b.size;
+}
+
+/** Whether `x` may sit between the two halves of `a`'s paragraph: a page number, a footnote, a caption… */
+function passable(x, a) {
+  if (x.skip || PASSABLE.has(x.kind)) return true;
+  return x.kind === '' && (Math.abs(x.size - a.size) > 0.06 * a.size || x.font !== a.font || x.text.length < 60);
+}
+
+function linkFrom(a) {
+  const ahead = a.page.blocks.slice(a.index + 1).concat(view.pages[a.page.n]?.blocks ?? []);
+  for (const b of ahead) {
+    if (continues(a, b)) {
+      if (!b.prev) { a.next = b; b.prev = a; }
+      return;
+    }
+    if (!passable(b, a)) return;
+  }
+}
+
+/** Work out the links for a page whose blocks were just made, including those to its neighbours. */
+function linkPage(p) {
+  if (view.pages[p.n - 1] !== p) return;
+  const before = view.pages[p.n - 2];
+  for (const q of [before, view.pages[p.n]]) {
+    for (const b of q?.blocks ?? []) {
+      if (b.next?.page === p) b.next = null; // pointed at blocks this page no longer has
+      if (b.prev?.page === p) b.prev = null;
+    }
+  }
+  for (const b of p.blocks) linkFrom(b);
+  for (const b of before?.blocks ?? []) if (!b.next) linkFrom(b);
+}
+
+const headOf = (b) => { while (b.prev) b = b.prev; return b; };
+const tailOf = (b) => { while (b.next) b = b.next; return b; };
+/** Every block of the paragraph a block belongs to, first to last. */
+const partsOf = (b) => { const out = []; for (b = headOf(b); b; b = b.next) out.push(b); return out; };
+const sameParagraph = (a, b) => !!a && !!b && headOf(a) === headOf(b);
+/** Put text back together across a break, mending a word the break hyphenated. */
+const glue = (texts) => texts.reduce((a, b) => (HYPHEN_END.test(a) && /^\p{Ll}/u.test(b) ? a.slice(0, -1) + b : `${a} ${b}`));
+const paragraphText = (b) => glue(partsOf(b).map((x) => x.text.trim()));
 
 function cleanForSpeech(s) {
   return s
@@ -319,51 +394,11 @@ function chunkRects(block, chunk) {
   return [...byLine.values()].sort((a, b) => a.top - b.top);
 }
 
-/**
- * One outline around a sentence's lines, with rounded corners: the lines are joined edge to
- * edge, nearly aligned sides are straightened, and every corner (inner and outer) is eased.
- */
-function sentencePath(rects, size) {
-  const padX = size * 0.22, padY = size * 0.1, snap = size * 0.7, radius = size * 0.45;
-  const rows = rects.map((q) => ({ x0: q.x0 - padX, x1: q.x1 + padX, top: q.top, bottom: q.bottom }));
-  rows[0].top -= padY;
-  rows[rows.length - 1].bottom += padY;
-  for (let i = 1; i < rows.length; i++) rows[i - 1].bottom = rows[i].top = (rows[i - 1].bottom + rows[i].top) / 2;
-  for (const order of [1, -1]) {
-    for (let i = order > 0 ? 1 : rows.length - 1; i >= 1 && i < rows.length; i += order) {
-      const a = rows[i - 1], b = rows[i];
-      if (Math.abs(a.x0 - b.x0) < snap) a.x0 = b.x0 = Math.min(a.x0, b.x0);
-      if (Math.abs(a.x1 - b.x1) < snap) a.x1 = b.x1 = Math.max(a.x1, b.x1);
-    }
-  }
-  let pts = [];
-  for (const q of rows) pts.push([q.x1, q.top], [q.x1, q.bottom]); // down the right side
-  for (let i = rows.length - 1; i >= 0; i--) pts.push([rows[i].x0, rows[i].bottom], [rows[i].x0, rows[i].top]); // up the left
-  const same = (p, q) => Math.abs(p[0] - q[0]) < 0.01 && Math.abs(p[1] - q[1]) < 0.01;
-  pts = pts.filter((p, i) => !same(p, pts[(i + pts.length - 1) % pts.length]));
-  pts = pts.filter((p, i) => {
-    const a = pts[(i + pts.length - 1) % pts.length], b = pts[(i + 1) % pts.length];
-    return !((Math.abs(a[0] - p[0]) < 0.01 && Math.abs(b[0] - p[0]) < 0.01) || (Math.abs(a[1] - p[1]) < 0.01 && Math.abs(b[1] - p[1]) < 0.01));
-  });
-  const f = (p) => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`;
-  let d = '';
-  pts.forEach((p, i) => {
-    const a = pts[(i + pts.length - 1) % pts.length], b = pts[(i + 1) % pts.length];
-    const la = Math.hypot(a[0] - p[0], a[1] - p[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
-    const k = Math.min(radius, la / 2, lb / 2);
-    const p1 = [p[0] + (a[0] - p[0]) / la * k, p[1] + (a[1] - p[1]) / la * k];
-    const p2 = [p[0] + (b[0] - p[0]) / lb * k, p[1] + (b[1] - p[1]) / lb * k];
-    d += `${i ? 'L' : 'M'}${f(p1)}Q${f(p)} ${f(p2)}`;
-  });
-  return d + 'Z';
-}
-
 // ── Document view ───────────────────────────────────────────────────────────
 
 const view = { doc: null, task: null, pages: [], token: 0, bytes: null, name: '' };
 const blockOf = new WeakMap();
 const MAX_PIXELS = 16e6;
-const SVG = 'http://www.w3.org/2000/svg';
 
 const pct = (v, total) => (100 * v / total).toFixed(3) + '%';
 const place = (el, x0, top, x1, bottom, p) => {
@@ -397,14 +432,11 @@ function makePage(n, w, h) {
   const canvas = document.createElement('canvas');
   const hl = document.createElement('div');
   hl.className = 'layer hl-layer';
-  const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('preserveAspectRatio', 'none');
-  hl.append(svg);
   const blocksEl = document.createElement('div');
   blocksEl.className = 'layer';
   el.append(canvas, hl, blocksEl);
   return {
-    n, el, canvas, svg, blocksEl, w, h, vt: null, proxyP: null, blocksP: null, blocks: null, lines: null,
+    n, el, canvas, hl, blocksEl, w, h, vt: null, proxyP: null, blocksP: null, blocks: null, lines: null,
     layout: 'none', layoutPending: null, // who grouped the lines into paragraphs: none | guess | claude
     near: false, scale: 0, target: 0, renderTask: null,
     ai: 'none', aiPromise: null, aiDone: null, // Claude's preparation of this page: none | pending | ready | error
@@ -485,6 +517,7 @@ function setBlocks(p, groups) {
   }
   p.blocksEl.replaceChildren(...blocks.map((b) => b.el));
   p.blocks = blocks;
+  linkPage(p);
 }
 
 /** Replace a page's guessed paragraphs with Claude's: { blocks: [{ kind, lines: [line id] }] }. */
@@ -527,8 +560,9 @@ async function ensureBlocks(p) {
 /** Whether someone is listening to, or asking about, a paragraph on this page right now. */
 function inUse(p) {
   const s = speaker.session;
-  if (chat.block?.page === p) return true;
-  return !!s && (speaker.active?.page === p || s.lastBlock.page === p || s.segs.some((x) => x.block.page === p));
+  if (chat.block && partsOf(chat.block).some((b) => b.page === p)) return true;
+  return !!s && (speaker.active?.page === p || s.lastBlock.page === p
+    || s.segs.some((x) => x.block.page === p || x.chunk.join?.some((j) => j.block.page === p)));
 }
 
 async function adjacentBlock(block, dir) {
@@ -1001,7 +1035,34 @@ const voice = {
 // ── Speech ──────────────────────────────────────────────────────────────────
 
 const segsFor = (block) => chunkBlock(block).map((chunk) => ({ block, chunk, gap: 0 }));
-const spoken = (chunk) => (!chunk.explain && settings.ai && chunk.aiSay) || chunk.say;
+const spoken = (chunk) => (chunk.join ? glue(chunk.join.map((j) => spoken(j.chunk)))
+  : (!chunk.explain && settings.ai && chunk.aiSay) || chunk.say);
+
+/**
+ * What to voice for a paragraph, from one of its blocks to its last. Where it crosses to the
+ * next column or page, the two halves of the sentence cut by the break become one piece
+ * (`chunk.join` lists the halves), so the voice doesn't stop mid-sentence.
+ */
+function paragraphSegs(first) {
+  const segs = [];
+  for (let b = first; b; b = b.next) {
+    const mine = segsFor(b);
+    const last = segs[segs.length - 1];
+    if (last && mine.length) {
+      const join = [...(last.chunk.join ?? [{ block: last.block, chunk: last.chunk }]), { block: b, chunk: mine[0].chunk }];
+      if (join.reduce((n, j) => n + j.chunk.end - j.chunk.start, 0) <= MAX_CHUNK * 1.2) {
+        last.chunk = {
+          join, start: join[0].chunk.start, end: join[0].chunk.end,
+          raw: glue(join.map((j) => j.chunk.raw)), say: glue(join.map((j) => j.chunk.say)),
+          notation: join.some((j) => j.chunk.notation),
+        };
+        mine.shift();
+      }
+    }
+    segs.push(...mine);
+  }
+  return segs;
+}
 const BUFFER_AHEAD = 25;   // seconds of audio to keep ready beyond the playhead
 
 /** Where the first sentence in a growing piece of text ends, or 0 if it hasn't yet. */
@@ -1030,13 +1091,14 @@ const speaker = {
    * of the chat about it ('explain').
    */
   start(block, mode, turn = null) {
+    block = headOf(block); // a paragraph is read from its start, whichever part of it was picked
     this.halt();
     this.ensureCtx();
     const s = this.session = {
       id: ++this.seq, mode, turn, segs: [], next: 0, sched: [], nextTime: 0, cur: -1,
       // A reply is a one-off: it never carries on to the next paragraph.
       busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
-      lastBlock: block, waitPage: null,
+      lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null,
       // A double-click starts as a single click; holding audio back briefly lets it change its mind unheard.
       notBefore: this.ctx.currentTime + 0.25,
       synthAbort: new AbortController(), aiAbort: new AbortController(),
@@ -1045,8 +1107,8 @@ const speaker = {
     if (mode === 'explain') {
       this.streamReply(s, block);
     } else {
-      s.segs = segsFor(block);
-      narration.request(block.page, true);
+      s.segs = paragraphSegs(block);
+      for (const b of partsOf(block).reverse()) narration.request(b.page, true);
     }
     if (voice.state === 'error') voice.load();
     renderPlayer();
@@ -1067,7 +1129,7 @@ const speaker = {
 
   /** A click on the paragraph being spoken pauses or resumes it; on any other one, reads it. */
   toggleBlock(block) {
-    if (this.session && this.active === block) this.toggle();
+    if (this.session && sameParagraph(this.active, block)) this.toggle();
     else this.speak(block);
   },
 
@@ -1087,7 +1149,7 @@ const speaker = {
   async skip(dir) {
     const from = this.active;
     if (!from) return;
-    const b = await nextReadable(from, dir);
+    const b = await nextReadable(dir > 0 ? tailOf(from) : headOf(from), dir);
     if (b && this.active === from) { this.start(b, 'read'); reveal(b); } // from a reply, this goes back to reading
   },
 
@@ -1108,11 +1170,11 @@ const speaker = {
     };
     try {
       if (!(await startClaude())) throw ai.doc?.error || new AiError('api');
-      const near = block.page.blocks || [];
+      const end = tailOf(block);
       await ai.explain({
-        page: block.page.n, text: block.text, question: turn.question, history: chat.before(turn), signal,
-        before: near[block.index - 1]?.text.slice(-500) || '',
-        after: near[block.index + 1]?.text.slice(0, 500) || '',
+        page: block.page.n, text: paragraphText(block), question: turn.question, history: chat.before(turn), signal,
+        before: block.page.blocks?.[block.index - 1]?.text.slice(-500) || '',
+        after: end.page.blocks?.[end.index + 1]?.text.slice(0, 500) || '',
         onText: (delta) => {
           buf += delta;
           for (let cut; (cut = sentenceEnd(buf)) > 0; buf = buf.slice(cut)) emit(buf.slice(0, cut));
@@ -1143,8 +1205,8 @@ const speaker = {
     }
     if (ahead > BUFFER_AHEAD) return;
     const idx = s.next, id = s.id, seg = s.segs[idx];
-    const block = seg.block;
-    if (seg.chunk.notation && usingClaude() && !narration.settled(block)) {
+    const block = (seg.chunk.join?.map((j) => j.block) ?? [seg.block]).find((b) => !narration.settled(b));
+    if (seg.chunk.notation && usingClaude() && block) {
       // Claude is still working out how this should be spoken: wait for it rather than read "E4".
       if (s.waitPage !== block) {
         s.waitPage = block;
@@ -1185,8 +1247,8 @@ const speaker = {
     if (this.session !== s) return;
     s.extending = false;
     if (!b) { s.exhausted = true; return; }
-    s.lastBlock = b;
-    const segs = segsFor(b);
+    s.lastBlock = tailOf(b);
+    const segs = paragraphSegs(b);
     segs[0].gap = 0.35; // a breath between paragraphs
     s.segs.push(...segs);
     this.pump();
@@ -1205,7 +1267,7 @@ const speaker = {
       src.connect(ctx.destination);
       const start = Math.max(s.nextTime + seg.gap, ctx.currentTime + 0.05, s.notBefore);
       src.start(start);
-      s.sched.push({ start, end: start + buf.duration, seg, src });
+      s.sched.push({ start, end: start + buf.duration, seg, src, voiced: voicedSpan(pcm, rate) });
       s.nextTime = start + buf.duration;
       this.last = { seconds: buf.duration, text: spoken(seg.chunk) };
     }
@@ -1228,6 +1290,7 @@ const speaker = {
       if (cur >= 0) setActive(s.sched[cur].seg.block, s.sched[cur].seg.chunk, true, s.mode);
       renderPlayer();
     }
+    if (cur >= 0) wordMark.follow(s.sched[cur], t);
     const drained = s.next >= s.segs.length && !s.busy && !s.streaming && !s.extending && (!settings.keepReading || s.exhausted);
     if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(); return; }
     this.pump();
@@ -1258,13 +1321,14 @@ const speaker = {
       s.aiAbort = new AbortController();
       s.streaming = false;
     }
-    const end = s.segs.findLastIndex((x) => x.block === this.active) + 1;
+    const mine = (x) => sameParagraph(x.block, this.active);
+    const end = s.segs.findLastIndex(mine) + 1;
     if (end <= 0) return;
     s.segs.length = end;
     s.next = Math.min(s.next, end);
-    s.lastBlock = this.active;
-    this.silence(s.sched.filter((e) => e.seg.block !== this.active));
-    s.sched = s.sched.filter((e) => e.seg.block === this.active);
+    s.lastBlock = s.mode === 'explain' ? this.active : tailOf(this.active);
+    this.silence(s.sched.filter((e) => !mine(e.seg)));
+    s.sched = s.sched.filter((e) => mine(e.seg));
     s.nextTime = s.sched.length ? s.sched[s.sched.length - 1].end : 0;
   },
 
@@ -1322,37 +1386,94 @@ const speaker = {
 
 // ── Highlighting ────────────────────────────────────────────────────────────
 
-let shownPath = null;
 function setActive(block, chunk, auto = false, mode = 'read') {
   const prev = speaker.active;
   if (prev !== block) {
-    prev?.el.classList.remove('active', 'pending', 'explain');
+    if (prev) for (const b of partsOf(prev)) b.el.classList.remove('active', 'pending', 'explain');
     speaker.active = block;
     if (block && auto) reveal(block);
     if (prev && block && prev.page !== block.page) narration.relayout();
   }
-  if (block) {
-    block.el.classList.add('active');
-    block.el.classList.toggle('explain', mode === 'explain');
-    block.el.classList.toggle('pending', !chunk);
+  // Every part of the paragraph lights up, wherever on the page (or the next) it sits.
+  if (block) for (const b of partsOf(block)) {
+    b.el.classList.add('active');
+    b.el.classList.toggle('explain', mode === 'explain');
+    b.el.classList.toggle('pending', !chunk);
   }
-  // Fade the previous sentence out as the next fades in.
-  if (shownPath) {
-    const old = shownPath;
-    old.classList.remove('on');
-    setTimeout(() => old.remove(), 320);
-    shownPath = null;
-  }
-  if (block && chunk && chunk.start != null) {
-    const p = block.page;
-    p.svg.setAttribute('viewBox', `0 0 ${p.w} ${p.h}`);
-    const path = shownPath = document.createElementNS(SVG, 'path');
-    path.setAttribute('d', sentencePath(chunkRects(block, chunk), block.size));
-    p.svg.append(path);
-    path.getBoundingClientRect(); // settle the starting state so the fade-in runs
-    path.classList.add('on');
-  }
+  if (!block || !chunk || chunk.start == null) wordMark.hide();
 }
+
+// ── The word being spoken ───────────────────────────────────────────────────
+
+/** Where the speech itself starts and ends within a clip, in seconds, leaving out silence at either end. */
+function voicedSpan(pcm, rate) {
+  let a = 0, b = pcm.length - 1;
+  while (a < b && Math.abs(pcm[a]) < 0.02) a++;
+  while (b > a && Math.abs(pcm[b]) < 0.02) b--;
+  return [a / rate, (b + 1) / rate];
+}
+
+const WORD_LEAD = 0.22; // seconds the mark runs ahead, so it lands with the word rather than after it
+
+/**
+ * A sentence's words as ranges of their block's text, each with the share of the sentence
+ * finished once it is said. A sentence cut by a column or page break has words in two blocks.
+ */
+function chunkWords(block, chunk) {
+  if (chunk.words) return chunk.words;
+  const words = [];
+  let total = 0;
+  for (const { block: b, chunk: c } of chunk.join ?? [{ block, chunk }]) {
+    for (const m of b.text.slice(c.start, c.end).matchAll(/\S+/g)) {
+      const part = m[0];
+      const digits = (part.match(/\d/g) || []).length;
+      total += part.length + 1 + digits * 3 + (/[.!?:;]\W*$/.test(part) ? 4 : /[,)—–]\W*$/.test(part) ? 2 : 0);
+      const start = c.start + m.index;
+      // The mark covers the word itself, not the punctuation that trails it.
+      words.push({ block: b, start, end: start + (part.replace(/[.,;:!?)\]"'”’]+$/, '').length || part.length), upTo: total });
+    }
+  }
+  for (const w of words) w.upTo /= total;
+  return chunk.words = words;
+}
+
+/**
+ * The stronger highlight: a small box on the word being spoken, moving through the paragraph.
+ * The voice gives no word timings, so the word is estimated from how far through the clip we
+ * are: longer words, numbers and punctuation pauses take a larger share of the time.
+ */
+const wordMark = {
+  el: Object.assign(document.createElement('div'), { className: 'word' }),
+  word: null,
+
+  follow(entry, t) {
+    const { block, chunk } = entry.seg;
+    if (chunk.start == null) return;
+    const words = chunkWords(block, chunk);
+    if (!words.length) return;
+    const [a, b] = entry.voiced;
+    const frac = (t + WORD_LEAD - entry.start - a) / Math.max(0.05, b - a);
+    const w = words.find((x) => frac < x.upTo) ?? words[words.length - 1];
+    const p = w.block.page;
+    if (w === this.word && this.el.parentNode === p.hl) return;
+    const r = chunkRects(w.block, w)[0];
+    if (!r) return;
+    this.word = w;
+    // The sentence has crossed into the paragraph's next part: bring that into view.
+    if (w.block !== speaker.active && speaker.session) setActive(w.block, chunk, true, speaker.session.mode);
+    const fresh = this.el.parentNode !== p.hl || !this.el.classList.contains('on');
+    if (fresh) { this.el.classList.add('jump'); p.hl.append(this.el); }
+    const padX = w.block.size * 0.14, padY = w.block.size * 0.08;
+    place(this.el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, p);
+    if (fresh) { this.el.getBoundingClientRect(); this.el.classList.remove('jump'); } // appear in place, then glide
+    this.el.classList.add('on');
+  },
+
+  hide() {
+    this.word = null;
+    this.el.classList.remove('on');
+  },
+};
 
 // ── Rendering the controls ──────────────────────────────────────────────────
 
@@ -1378,8 +1499,7 @@ function renderPlayer() {
     text = loading ? preparing : 'Click a paragraph to listen';
     sub = loading ? 'The first run downloads about 65 MB, once.' : 'Double-click one to ask Claude about it';
   }
-  els.nowText.textContent = text;
-  els.nowSub.textContent = sub;
+  els.playBtn.title = s && s.cur >= 0 ? sub : `${text} — ${sub}`; // the bar has no room for words
   els.player.classList.toggle('playing', !!s && !s.paused);
   els.player.classList.toggle('waiting', !!s && !s.paused && s.cur < 0 && voice.state !== 'error');
   els.player.classList.toggle('explaining', explaining);
@@ -1388,7 +1508,7 @@ function renderPlayer() {
   els.stopBtn.hidden = !s;
   els.prevBtn.disabled = els.nextBtn.disabled = !s;
   els.voiceBtn.textContent = settings.voice.split(' ').slice(0, 2).join(' ');
-  els.progress.style.width = voice.pct + '%';
+  els.progress.style.height = voice.pct + '%';
   els.progress.classList.toggle('done', !loading);
   if (location.protocol !== 'file:') {
     els.voiceNote.textContent = loading ? preparing
@@ -1471,10 +1591,11 @@ const chat = {
 
   /** Open the bar on a paragraph, starting a new conversation unless it is already about that one. */
   open(block) {
+    block = headOf(block);
     if (this.block !== block) {
       this.close();
       this.block = block;
-      block.el.classList.add('chosen');
+      for (const b of partsOf(block)) b.el.classList.add('chosen');
       els.chatInput.value = '';
     }
     els.chat.hidden = false;
@@ -1485,7 +1606,7 @@ const chat = {
   close() {
     if (!this.block) return;
     if (speaker.session?.mode === 'explain') speaker.stop();
-    this.block.el.classList.remove('chosen');
+    for (const b of partsOf(this.block)) b.el.classList.remove('chosen');
     this.block = null;
     this.turns = [];
     els.chat.hidden = true;
@@ -1573,6 +1694,16 @@ els.pages.addEventListener('click', (e) => {
   const b = blockOf.get(e.target);
   if (b && e.detail < 2) speaker.toggleBlock(b); // the second click of a double-click is handled below
 });
+// Pointing at any part of a paragraph shows all of it.
+let hovered = [];
+const setHover = (block) => {
+  if (block ? hovered.includes(block) : !hovered.length) return;
+  hovered.forEach((b) => b.el.classList.remove('hover'));
+  hovered = block ? partsOf(block) : [];
+  hovered.forEach((b) => b.el.classList.add('hover'));
+};
+els.pages.addEventListener('mouseover', (e) => setHover(blockOf.get(e.target)));
+els.pages.addEventListener('mouseleave', () => setHover(null));
 els.pages.addEventListener('dblclick', (e) => {
   const b = blockOf.get(e.target);
   if (!b) return;
