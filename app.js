@@ -240,6 +240,7 @@ function passable(x, a) {
 }
 
 function linkFrom(a) {
+  if (a.next) return;
   const ahead = a.page.blocks.slice(a.index + 1).concat(view.pages[a.page.n]?.blocks ?? []);
   for (const b of ahead) {
     if (continues(a, b)) {
@@ -496,24 +497,50 @@ function releasePage(p) {
   }
 }
 
+/**
+ * Split a group of lines where the text jumps to another part of the page: the next column, the
+ * far side of a figure, a header and a footer filed together. One box around such a group would
+ * cover everything in between (at worst the whole page), so each stretch gets its own.
+ */
+function regions(lines) {
+  const out = [];
+  for (const ln of lines) {
+    const apart = (r) => ln.x0 > r.x1 + ln.size || ln.x1 < r.x0 - ln.size
+      || ln.bottom < r.top - 2 * ln.size || ln.top > r.bottom + 5 * ln.size;
+    // Usually the stretch being built; after a stray fragment (an equation number, say), the one before it.
+    let r = out.findLast((x) => !apart(x));
+    if (!r) out.push(r = { lines: [], x0: ln.x0, x1: ln.x1, top: ln.top, bottom: ln.bottom });
+    r.lines.push(ln);
+    r.x0 = Math.min(r.x0, ln.x0); r.x1 = Math.max(r.x1, ln.x1);
+    r.top = Math.min(r.top, ln.top); r.bottom = Math.max(r.bottom, ln.bottom);
+  }
+  return out.map((r) => r.lines);
+}
+
 /** Make a page's clickable paragraphs from groups of its lines: [{ lines, kind }] in reading order. */
 function setBlocks(p, groups) {
   const blocks = [];
   for (const g of groups) {
-    const b = buildBlock(g.lines);
-    if (!b) continue;
-    b.page = p;
-    b.index = blocks.length;
-    b.kind = g.kind || '';
-    b.skip = g.kind === 'skip'; // a page number, running header, label inside a figure…: passed over when reading on
-    const el = b.el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'blk';
-    el.setAttribute('aria-label', 'Read aloud: ' + b.text.slice(0, 90));
-    const padX = Math.max(3, b.size * 0.5), padY = Math.max(1.5, b.size * 0.26);
-    place(el, b.x0 - padX, b.top - padY, b.x1 + padX, b.bottom + padY, p);
-    blockOf.set(el, b);
-    blocks.push(b);
+    let before = null; // the previous stretch of the same paragraph
+    for (const lines of regions(g.lines)) {
+      const b = buildBlock(lines);
+      if (!b) continue;
+      // Stretches of one paragraph stay one paragraph: selected and read together.
+      if (before && g.kind !== 'skip') { before.next = b; b.prev = before; }
+      before = b;
+      b.page = p;
+      b.index = blocks.length;
+      b.kind = g.kind || '';
+      b.skip = g.kind === 'skip'; // a page number, running header, label inside a figure…: passed over when reading on
+      const el = b.el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'blk';
+      el.setAttribute('aria-label', 'Read aloud: ' + b.text.slice(0, 90));
+      const padX = Math.max(3, b.size * 0.5), padY = Math.max(1.5, b.size * 0.26);
+      place(el, b.x0 - padX, b.top - padY, b.x1 + padX, b.bottom + padY, p);
+      blockOf.set(el, b);
+      blocks.push(b);
+    }
   }
   p.blocksEl.replaceChildren(...blocks.map((b) => b.el));
   p.blocks = blocks;
@@ -1048,7 +1075,8 @@ function paragraphSegs(first) {
   for (let b = first; b; b = b.next) {
     const mine = segsFor(b);
     const last = segs[segs.length - 1];
-    if (last && mine.length) {
+    // The halves are one sentence only if the part before the break didn't finish its own.
+    if (last && mine.length && !SENTENCE_OVER.test(b.prev.text.trimEnd())) {
       const join = [...(last.chunk.join ?? [{ block: last.block, chunk: last.chunk }]), { block: b, chunk: mine[0].chunk }];
       if (join.reduce((n, j) => n + j.chunk.end - j.chunk.start, 0) <= MAX_CHUNK * 1.2) {
         last.chunk = {
