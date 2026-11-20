@@ -1295,18 +1295,21 @@ const speaker = {
       src.connect(ctx.destination);
       const start = Math.max(s.nextTime + seg.gap, ctx.currentTime + 0.05, s.notBefore);
       src.start(start);
-      s.sched.push({ start, end: start + buf.duration, seg, src, voiced: voicedSpan(pcm, rate) });
+      const words = seg.chunk.start == null ? [] : chunkWords(seg.block, seg.chunk);
+      const times = words.length ? wordTimes(words.map((w) => w.part), pcm, rate) : null;
+      s.sched.push({ start, end: start + buf.duration, seg, src, times });
       s.nextTime = start + buf.duration;
       this.last = { seconds: buf.duration, text: spoken(seg.chunk) };
     }
     this.pump();
   },
 
-  /** Runs a few times a second: moves the highlight, tops up the buffer, notices the end. */
+  /** Runs every frame (a few times a second in a hidden tab): moves the highlight, tops up the buffer, notices the end. */
   tick() {
     const s = this.session;
     if (!s || !this.ctx) return;
-    const t = this.ctx.currentTime;
+    // What is heard now left the context a little earlier: noticeably so over Bluetooth.
+    const t = this.ctx.currentTime - (this.ctx.outputLatency || 0);
     let cur = -1;
     for (let i = s.sched.length - 1; i >= 0; i--) {
       const e = s.sched[i];
@@ -1433,55 +1436,136 @@ function setActive(block, chunk, auto = false, mode = 'read') {
 
 // ── The word being spoken ───────────────────────────────────────────────────
 
-/** Where the speech itself starts and ends within a clip, in seconds, leaving out silence at either end. */
-function voicedSpan(pcm, rate) {
-  let a = 0, b = pcm.length - 1;
-  while (a < b && Math.abs(pcm[a]) < 0.02) a++;
-  while (b > a && Math.abs(pcm[b]) < 0.02) b--;
-  return [a / rate, (b + 1) / rate];
-}
+const WORD_LEAD = 0.12; // seconds the mark runs ahead: its glide takes 0.09 s, and it should land as the word starts
 
-const WORD_LEAD = 0.22; // seconds the mark runs ahead, so it lands with the word rather than after it
-
-/**
- * A sentence's words as ranges of their block's text, each with the share of the sentence
- * finished once it is said. A sentence cut by a column or page break has words in two blocks.
- */
+/** A sentence's words as ranges of their block's text. A sentence cut by a column or page break has words in two blocks. */
 function chunkWords(block, chunk) {
   if (chunk.words) return chunk.words;
   const words = [];
-  let total = 0;
   for (const { block: b, chunk: c } of chunk.join ?? [{ block, chunk }]) {
     for (const m of b.text.slice(c.start, c.end).matchAll(/\S+/g)) {
-      const part = m[0];
-      const digits = (part.match(/\d/g) || []).length;
-      total += part.length + 1 + digits * 3 + (/[.!?:;]\W*$/.test(part) ? 4 : /[,)—–]\W*$/.test(part) ? 2 : 0);
-      const start = c.start + m.index;
+      const part = m[0], start = c.start + m.index;
       // The mark covers the word itself, not the punctuation that trails it.
-      words.push({ block: b, start, end: start + (part.replace(/[.,;:!?)\]"'”’]+$/, '').length || part.length), upTo: total });
+      words.push({ block: b, part, start, end: start + (part.replace(/[.,;:!?)\]"'”’]+$/, '').length || part.length) });
     }
   }
-  for (const w of words) w.upTo /= total;
   return chunk.words = words;
 }
 
+/** Stretches of speech in a clip, as [start, end] in seconds, split wherever the voice pauses. */
+function spokenPhrases(pcm, rate) {
+  const FRAME = 0.01, MIN_PAUSE = 12; // frames
+  const n = Math.round(rate * FRAME), frames = Math.floor(pcm.length / n), rms = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    let e = 0;
+    for (let i = f * n, end = i + n; i < end; i++) e += pcm[i] * pcm[i];
+    rms[f] = Math.sqrt(e / n);
+  }
+  // Quiet is judged against the clip's own loudness, so a soft voice isn't mistaken for silence.
+  const quiet = Float32Array.from(rms).sort()[Math.floor(frames * 0.9)] * 0.08;
+  const out = [];
+  let a = -1, gap = 0;
+  for (let f = 0; f <= frames; f++) {
+    if (f < frames && rms[f] > quiet) { if (a < 0) a = f; gap = 0; }
+    else if (a >= 0 && (++gap >= MIN_PAUSE || f === frames)) { out.push([a * FRAME, (f - gap + 1) * FRAME]); a = -1; gap = 0; }
+  }
+  return out.length ? out : [[0, pcm.length / rate]];
+}
+
+const ONES = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(' ');
+const TENS = 'twenty thirty forty fifty sixty seventy eighty ninety'.split(' ');
+
+/** A whole number roughly as it is said aloud: "1984" as a year, "20000" as twenty thousand. */
+function sayNumber(d) {
+  const n = Number(d);
+  if (d.length > 15 || (d.length > 1 && d[0] === '0')) return [...d].map((c) => ONES[c]).join(' ');
+  const upTo99 = (x) => (x < 20 ? ONES[x] : TENS[(x / 10 | 0) - 2] + (x % 10 ? ' ' + ONES[x % 10] : ''));
+  const upTo999 = (x) => (x >= 100 ? ONES[x / 100 | 0] + ' hundred' + (x % 100 ? ' ' + upTo99(x % 100) : '') : upTo99(x));
+  if (d.length === 4 && n >= 1100 && n < 2100 && n % 1000 >= 100) {
+    return upTo99(n / 100 | 0) + ' ' + (n % 100 < 10 ? (n % 100 ? 'oh ' + ONES[n % 100] : 'hundred') : upTo99(n % 100));
+  }
+  const out = [];
+  for (let rest = n, i = 0; rest > 0 || !out.length; rest = Math.floor(rest / 1000), i++) {
+    const g = rest % 1000;
+    if (g || !rest) out.unshift(upTo999(g) + ['', ' thousand', ' million', ' billion', ' trillion'][i]);
+  }
+  return out.join(' ');
+}
+
+/** How long a word takes to say, in rough units of a letter: figures and symbols count as spelt out, initials letter by letter. */
+function wordWeight(part) {
+  const said = part
+    .replace(/(\d),(?=\d{3}\b)/g, '$1')
+    .replace(/(\d+)\.(\d+)/g, (_, a, b) => `${sayNumber(a)} point ${[...b].map((c) => ONES[c]).join(' ')}`)
+    .replace(/\d+/g, (d) => ` ${sayNumber(d)} `)
+    .replace(/%/g, ' percent').replace(/\$/g, ' dollars').replace(/&/g, ' and ')
+    .replace(/\b\p{Lu}{2,5}\b/gu, (m) => (/[AEIOU]/.test(m) && m.length > 3 ? m : [...m].join('ay ')))
+    .match(/[\p{L}\p{N}]+/gu) || [];
+  return said.reduce((sum, x) => sum + x.length + 0.5, 0) || 0.5;
+}
+
 /**
- * The stronger highlight: a small box on the word being spoken, moving through the paragraph.
- * The voice gives no word timings, so the word is estimated from how far through the clip we
- * are: longer words, numbers and punctuation pauses take a larger share of the time.
+ * When each word of a spoken sentence starts, in seconds into its clip. The voice gives no word
+ * timings, so they are worked out from the audio: its pauses are found and matched to gaps
+ * between words, at punctuation where that fits how long each phrase took, and within a phrase
+ * each word takes a share of the time by its spoken length, the last one drawn out a little.
+ * (Measured against a speech recogniser's timings, this is off by about 0.09 s on average.)
  */
+function wordTimes(parts, pcm, rate) {
+  const FINAL = 4;   // extra weight on the word before a pause: voices draw it out
+  const BARE = 1.2;  // cost of a 0.2 s pause where the text has no punctuation, in seconds of misfit
+  const SKIP = 0.6;  // cost of taking a 0.2 s pause as falling inside a word
+  const N = parts.length, ph = spokenPhrases(pcm, rate), K = ph.length;
+  const cum = [0];
+  for (const part of parts) cum.push(cum[cum.length - 1] + wordWeight(part));
+  const per = ph.reduce((sum, [a, b]) => sum + b - a, 0) / (cum[N] + K * FINAL); // seconds per unit of weight
+  // best[k][i]: the least cost of having said words 0..i-1 by the end of phrase k, with a pause there.
+  const best = ph.map(() => new Float64Array(N + 1).fill(Infinity));
+  const from = ph.map(() => new Array(N + 1).fill(null));
+  for (let k = 0; k < K; k++) {
+    const last = k === K - 1, pause = last ? 0 : ph[k + 1][0] - ph[k][1];
+    for (let k0 = k - 1, dur = 0, skipped = 0; k0 >= -1; k0--) { // phrases k0+1..k said as one run of words
+      dur += ph[k0 + 1][1] - ph[k0 + 1][0];
+      if (k0 + 1 < k) skipped += SKIP * (ph[k0 + 2][0] - ph[k0 + 1][1]) / 0.2;
+      for (let i = last ? N : 1; i <= (last ? N : N - 1); i++) {
+        const edge = last ? 0
+          : /[.!?:;]\W*$/.test(parts[i - 1]) ? -0.05
+          : /[,)—–-]\W*$/.test(parts[i - 1]) || /^[(—–]/.test(parts[i]) ? 0.05
+          : BARE * pause / 0.2;
+        for (let i0 = k0 < 0 ? 0 : 1; i0 < (k0 < 0 ? 1 : i); i0++) {
+          const prev = k0 < 0 ? 0 : best[k0][i0];
+          const cost = prev + Math.abs(dur - (cum[i] - cum[i0] + FINAL) * per) + skipped + edge;
+          if (cost < best[k][i]) { best[k][i] = cost; from[k][i] = [k0, i0]; }
+        }
+      }
+    }
+  }
+  const times = new Array(N).fill(ph[0][0]);
+  for (let k = K - 1, i = N; k >= 0 && from[k][i];) {
+    const [k0, i0] = from[k][i];
+    const span = ph.slice(k0 + 1, k + 1), dur = span.reduce((sum, [a, b]) => sum + b - a, 0);
+    for (let j = i0; j < i; j++) {
+      let at = (cum[j] - cum[i0]) / (cum[i] - cum[i0] + FINAL) * dur;
+      for (const [a, b] of span) { if (at <= b - a + 1e-9) { times[j] = a + at; break; } at -= b - a; }
+    }
+    k = k0; i = i0;
+  }
+  return times;
+}
+
+/** The stronger highlight: a small box on the word being spoken, moving through the paragraph. */
 const wordMark = {
   el: Object.assign(document.createElement('div'), { className: 'word' }),
   word: null,
 
   follow(entry, t) {
     const { block, chunk } = entry.seg;
-    if (chunk.start == null) return;
+    if (!entry.times) return;
     const words = chunkWords(block, chunk);
-    if (!words.length) return;
-    const [a, b] = entry.voiced;
-    const frac = (t + WORD_LEAD - entry.start - a) / Math.max(0.05, b - a);
-    const w = words.find((x) => frac < x.upTo) ?? words[words.length - 1];
+    const at = t + WORD_LEAD - entry.start;
+    let i = words.length - 1;
+    while (i > 0 && entry.times[i] > at) i--;
+    const w = words[i];
     const p = w.block.page;
     if (w === this.word && this.el.parentNode === p.hl) return;
     const r = chunkRects(w.block, w)[0];
@@ -1838,6 +1922,8 @@ addEventListener('drop', (e) => {
 addEventListener('scroll', () => { if (!pageIndQueued) { pageIndQueued = true; requestAnimationFrame(updatePageInd); } }, { passive: true });
 addEventListener('resize', () => { restoreAnchor(); updatePageInd(); rerenderSoon(); });
 setInterval(() => speaker.tick(), 80);
+// The word mark is timed to the frame; the interval above keeps reading going where frames stop.
+(function frame() { if (speaker.session && !speaker.session.paused) speaker.tick(); requestAnimationFrame(frame); })();
 
 ai.onChange = () => { renderChip(); renderPlayer(); };
 renderPlayer();
