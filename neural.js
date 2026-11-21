@@ -118,8 +118,8 @@ class WorkerVoice {
 class SupertonicVoice extends WorkerVoice {
   styles = new Map();
 
-  /** It speaks at whatever speed is asked for, so its audio needs no stretching. */
-  pace(speed) { return speed; }
+  /** The pace it will speak at when asked for `speed`: outside this range it loses words, so the caller stretches the rest. */
+  pace(speed) { return Math.min(1.15, Math.max(1, speed)); }
 
   static async load(spec, { onProgress } = {}) {
     const names = ['duration_predictor', 'text_encoder', 'vector_estimator', 'vocoder'];
@@ -149,8 +149,7 @@ class SupertonicVoice extends WorkerVoice {
       this.styles.get(spec.style).catch(() => this.styles.delete(spec.style));
     }
     await this.styles.get(spec.style);
-    // The model's own pace is unhurried; this much faster is its makers' default.
-    return this.request({ type: 'synth', text, voice: spec.style, lang: spec.lang, speed: speed * 1.05 }, signal);
+    return this.request({ type: 'synth', text, voice: spec.style, lang: spec.lang, speed: this.pace(speed) }, signal);
   }
 }
 

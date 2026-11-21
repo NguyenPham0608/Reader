@@ -6,6 +6,11 @@ import * as ort from './vendor/piper/ort.wasm.bundle.min.mjs';
 
 const STEPS = 8;       // more is slower and barely better; fewer starts to slur
 const MAX_CHARS = 300; // beyond this the model starts skipping words
+// How much faster than its own guess the model is asked to speak. Its makers' default is 1.05.
+// For Vietnamese it allows far too long: left at that, it fills the time with silences of a second
+// or more and drops or repeats words (about one word in five misheard in tests, one in twenty at 1.4).
+const PACE = { vi: 1.4 };
+const MAX_PAUSE = 0.3; // seconds; what silence remains inside a sentence is cut down to this
 
 let cfg, indexer, sessions;
 const styles = new Map();
@@ -54,7 +59,7 @@ async function synthOne(text, lang, style, speed) {
   const textIds = new ort.Tensor('int64', BigInt64Array.from(ids, (id) => BigInt(id)), [1, n]);
   const textMask = tensor(new Float32Array(n).fill(1), [1, 1, n]);
   const { duration } = await sessions.duration_predictor.run({ text_ids: textIds, style_dp: style.dp, text_mask: textMask });
-  const seconds = duration.data[0] / speed;
+  const seconds = duration.data[0] / (speed * (PACE[lang] ?? 1.05));
   const { text_emb: textEmb } = await sessions.text_encoder.run({ text_ids: textIds, style_ttl: style.ttl, text_mask: textMask });
 
   const rate = cfg.ae.sample_rate;
@@ -72,7 +77,7 @@ async function synthOne(text, lang, style, speed) {
     latent = out.denoised_latent.data;
   }
   const { wav_tts: wav } = await sessions.vocoder.run({ latent: tensor(latent, [1, dim, length]) });
-  return trim(wav.data.subarray(0, Math.floor(seconds * rate)), rate);
+  return squeeze(trim(wav.data.subarray(0, Math.floor(seconds * rate)), rate), rate, MAX_PAUSE / speed);
 }
 
 /** The model pads each sentence with about half a second of near-silence at either end; keep a breath of it. */
@@ -83,6 +88,23 @@ function trim(pcm, rate) {
   while (a < b && !loud(a)) a += win;
   while (b > a && !loud(b - win)) b -= win;
   return pcm.subarray(Math.max(0, a - Math.round(rate * 0.04)), Math.min(pcm.length, b + Math.round(rate * 0.14)));
+}
+
+/** Shorten every silence inside a sentence that runs longer than `max` seconds to that. */
+function squeeze(pcm, rate, max) {
+  const quiet = 0.012, win = Math.round(rate * 0.01), keep = [];
+  let run = 0, kept = 0;
+  for (let a = 0; a < pcm.length; a += win) {
+    const end = Math.min(pcm.length, a + win);
+    let peak = 0;
+    for (let i = a; i < end; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+    run = peak > quiet ? 0 : run + 1;
+    if (run * win <= max * rate) { keep.push(a); kept += end - a; }
+  }
+  const out = new Float32Array(kept);
+  let at = 0;
+  for (const a of keep) { const part = pcm.subarray(a, Math.min(pcm.length, a + win)); out.set(part, at); at += part.length; }
+  return out;
 }
 
 async function synth({ text, voice, lang, speed }) {
