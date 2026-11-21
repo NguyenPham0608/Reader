@@ -1,7 +1,7 @@
 {
   "app.js": {
-    "mtime": 1795292417.7115607,
-    "ast_hash": "3c2ec942a76e505df01dc7a128bff635",
+    "mtime": 1795293500.7212987,
+    "ast_hash": "93be3346817b59c94deeb0276ab2a299",
     "semantic_hash": ""
   },
   "serve.py": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795292432.897967,
-    "ast_hash": "78705c56493a096f84560bbd3d1fb01a",
+    "mtime": 1795293475.113783,
+    "ast_hash": "71204303899abc318cbde94d2109de63",
     "semantic_hash": ""
   },
   "ai.js": {

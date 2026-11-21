@@ -27,7 +27,7 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true };
+const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true, colors: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
@@ -36,6 +36,7 @@ if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) se
 if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
 if (!settings.plain || typeof settings.plain !== 'object') settings.plain = {};
 if (!settings.own || typeof settings.own !== 'object') settings.own = {};
+if (!settings.colors || typeof settings.colors !== 'object') settings.colors = {};
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
 
 // ── Reading in another language ─────────────────────────────────────────────
@@ -2178,6 +2179,78 @@ function refreshSysVoices() {
   buildVoiceMenu();
   renderPlayer();
 }
+
+// ── Preferences: the highlight colours ──────────────────────────────────────
+// Each is a CSS variable. The stylesheet's value is the default; a chosen one (`settings.colors`)
+// is laid over it. A colour here is a hue and how strongly it shows, since highlights sit over text.
+
+const COLORS = [
+  { key: 'para', css: '--para', name: 'Paragraph', about: 'The paragraph being read' },
+  { key: 'word', css: '--sentence', name: 'Word', about: 'The word being spoken' },
+  { key: 'boxFill', css: '--box-fill', name: 'Sentence', about: 'Inside the box round the sentence' },
+  { key: 'boxLine', css: '--box-line', name: 'Sentence outline', about: 'The line of that box' },
+  { key: 'hover', css: '--hover', name: 'Pointer', about: 'The paragraph under the pointer' },
+  { key: 'pulse', css: '--pulse', name: 'Waiting', about: 'The pulse while a paragraph is prepared' },
+  { key: 'explain', css: '--explain', name: 'Claude', about: 'A paragraph Claude is explaining' },
+];
+const rootStyle = document.documentElement.style;
+for (const c of COLORS) c.initial = getComputedStyle(document.documentElement).getPropertyValue(c.css).trim();
+
+/** 'rgba(251, 255, 179, .17)' or '#fbffb3' → { hex: '#fbffb3', alpha: 0.17 } */
+function parseColor(text) {
+  const hex = text.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (hex) return { hex: `#${hex[1].toLowerCase()}`, alpha: hex[2] ? parseInt(hex[2], 16) / 255 : 1 };
+  const n = (text.match(/[\d.]+/g) || []).map(Number);
+  if (n.length < 3) return { hex: '#ffff00', alpha: 0.3 };
+  return { hex: '#' + n.slice(0, 3).map((v) => Math.round(Math.min(255, v)).toString(16).padStart(2, '0')).join(''), alpha: n.length > 3 ? Math.min(1, n[3]) : 1 };
+}
+const formatColor = ({ hex, alpha }) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')}, ${+alpha.toFixed(3)})`;
+
+function applyColors() {
+  for (const c of COLORS) {
+    const chosen = settings.colors[c.key];
+    if (chosen) rootStyle.setProperty(c.css, chosen); else rootStyle.removeProperty(c.css);
+  }
+  // The pulse of a paragraph Claude is working on is its own colour, stronger.
+  const explain = settings.colors.explain && parseColor(settings.colors.explain);
+  if (explain) rootStyle.setProperty('--explain-deep', formatColor({ hex: explain.hex, alpha: Math.min(1, explain.alpha * 1.67) }));
+  else rootStyle.removeProperty('--explain-deep');
+}
+
+function buildPrefs() {
+  $('prefsRows').replaceChildren(...COLORS.map((c) => {
+    const row = Object.assign(document.createElement('div'), { className: 'prefs-row' });
+    const label = document.createElement('label');
+    label.append(Object.assign(document.createElement('b'), { textContent: c.name }), Object.assign(document.createElement('small'), { textContent: c.about }));
+    const hue = Object.assign(document.createElement('input'), { type: 'color', title: `${c.name}: colour` });
+    const strength = Object.assign(document.createElement('input'), { type: 'range', min: 0, max: 100, step: 1, title: `${c.name}: strength` });
+    const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: '↺', title: 'Back to the usual colour' });
+    hue.setAttribute('aria-label', `${c.name} colour`);
+    strength.setAttribute('aria-label', `${c.name} strength`);
+    reset.setAttribute('aria-label', `Reset ${c.name}`);
+    const show = () => {
+      const now = parseColor(settings.colors[c.key] || c.initial);
+      hue.value = now.hex;
+      strength.value = Math.round(now.alpha * 100);
+      reset.disabled = !settings.colors[c.key];
+    };
+    const choose = () => {
+      settings.colors[c.key] = formatColor({ hex: hue.value, alpha: strength.value / 100 });
+      saveSettings();
+      applyColors();
+      reset.disabled = false;
+    };
+    hue.addEventListener('input', choose);
+    strength.addEventListener('input', choose);
+    reset.addEventListener('click', () => { delete settings.colors[c.key]; saveSettings(); applyColors(); show(); });
+    show();
+    row.append(label, hue, strength, reset);
+    return row;
+  }));
+}
+$('prefsReset').addEventListener('click', () => { settings.colors = {}; saveSettings(); applyColors(); buildPrefs(); });
+applyColors();
+buildPrefs();
 
 // ── Chatting with Claude about a paragraph ──────────────────────────────────
 
