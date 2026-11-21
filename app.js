@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   bar: $('bar'), docTitle: $('docTitle'), pageInd: $('pageInd'), welcome: $('welcome'), pages: $('pages'),
   player: $('player'), playBtn: $('playBtn'), retryBtn: $('retryBtn'),
-  prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'),
+  prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'), langBtn: $('langBtn'), langMenu: $('langMenu'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
   chat: $('chat'), chatLog: $('chatLog'), chatForm: $('chatForm'), chatInput: $('chatInput'),
@@ -23,12 +23,46 @@ const els = {
 const SPEEDS = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const STORE = 'reader.settings.v2';
 
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true };
+// `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
+// language first. `sysVoices` is the system voice chosen for each language.
+const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
 settings.zoom = Math.min(3, Math.max(0.5, Number(settings.zoom) || 1));
+if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) settings.lang = '';
+if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
+
+// ── Reading in another language ─────────────────────────────────────────────
+// Claude translates, sentence by sentence. English is spoken by the reader's own voices; they
+// speak nothing else, so any other language is spoken by a voice the browser or system has.
+
+const synth = window.speechSynthesis || null;
+let sysVoices = [];
+const tagOf = (v) => v.lang.replace(/_/g, '-');
+const baseOf = (tag) => tag.split('-')[0].toLowerCase();
+/** A language's name ('pt-BR' → "Brazilian Portuguese"), in the language `locale`. */
+function languageName(tag, locale = 'en') {
+  try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) || tag; } catch { return tag; }
+}
+const voicesFor = (lang) => sysVoices.filter((v) => baseOf(tagOf(v)) === lang);
+const NOVELTY = /^(?:Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley)\b/; // macOS's character voices, in every language
+
+/** The system voice for a language: the one chosen, or else the plainest one that works offline. */
+function sysVoice(lang = settings.lang) {
+  const all = voicesFor(lang);
+  let home = ''; // the language's main country: France for French, Brazil for Portuguese
+  try { home = new Intl.Locale(lang).maximize().region || ''; } catch {}
+  const rank = (v) => (tagOf(v).split('-').includes(home) ? 4 : 0) + (v.localService ? 2 : 0) + (NOVELTY.test(v.name) ? 0 : 1);
+  return all.find((v) => v.voiceURI === settings.sysVoices[lang]) ?? all.reduce((a, b) => (a && rank(a) >= rank(b) ? a : b), null);
+}
+/** Silence the system voice. Cancelling one that is paused leaves the next waiting, hence the resume. */
+const hush = () => { synth?.cancel(); synth?.resume(); };
+/** Whether speech comes from a system voice rather than the reader's own. */
+const usesSysVoice = () => !!settings.lang && settings.lang !== 'en';
+/** The language being translated into, as specific as the voice is ('pt-BR'), or '' when reading as written. */
+const targetLang = () => (usesSysVoice() ? (sysVoice() ? tagOf(sysVoice()) : settings.lang) : settings.lang);
 
 // ── Text analysis: PDF text items → lines → paragraphs → sentences ──────────
 // Lines come from the PDF. Which lines form a paragraph is Claude's call (see `narration`),
@@ -549,6 +583,7 @@ function setBlocks(p, groups) {
 
 /** Replace a page's guessed paragraphs with Claude's: { blocks: [{ kind, lines: [line id] }] }. */
 function applyLayout(p, layout) {
+  p.tr = null; // the new paragraphs have no translation yet
   const used = new Set(), groups = [];
   for (const { kind, lines } of layout.blocks) {
     const mine = lines.map((id) => p.lines[id]).filter((ln) => ln && !used.has(ln));
@@ -947,6 +982,74 @@ const narration = {
   },
 };
 
+// ── Claude: translating for reading aloud ───────────────────────────────────
+
+/**
+ * Translations live on the sentences themselves (`chunk.tr[lang]`). A page is translated in one
+ * request, ahead of the voice; the paragraph about to be spoken is also asked for on its own,
+ * since that answer comes back in a couple of seconds and a page's takes much longer.
+ */
+const translation = {
+  pieces: (blocks) => blocks.flatMap((b) => chunkBlock(b).map((c, i) => ({ id: `${b.index}.${i}`, text: markedText(b, c.start, c.end) }))),
+
+  /** Put Claude's lines on their sentences. `fill`: a sentence it left out counts as having nothing to say. */
+  apply(blocks, lines, lang, fill) {
+    for (const { id, say } of lines) {
+      const [bi, ci] = id.split('.').map(Number);
+      const chunk = blocks.find((b) => b.index === bi)?.chunks?.[ci];
+      if (chunk) (chunk.tr ??= {})[lang] = say;
+    }
+    for (const b of blocks) {
+      if (fill) for (const c of chunkBlock(b)) (c.tr ??= {})[lang] ??= '';
+      if (chunkBlock(b).every((c) => c.tr?.[lang] != null)) (b.translated ??= {})[lang] = true;
+    }
+  },
+
+  /** Translate a whole page. Resolves when it has been tried; paragraphs it missed are left for `block`. */
+  page(p, lang) {
+    p.tr ??= {};
+    return p.tr[lang] ??= (async () => {
+      const token = view.token, mine = p.tr;
+      try {
+        if (!(await startClaude())) return;
+        await narration.request(p); // so the paragraphs are Claude's before they are translated
+        const blocks = await ensureBlocks(p);
+        if (token !== view.token || p.tr !== mine) return;
+        const todo = blocks.filter((b) => !b.skip && !b.translated?.[lang]);
+        const pieces = this.pieces(todo);
+        if (!pieces.length) return;
+        const { lines } = await ai.translate(p.n, pieces, lang, languageName(lang));
+        if (token === view.token) this.apply(todo, lines, lang, false);
+      } catch (e) {
+        console.warn('Claude could not translate page', p.n, e);
+        if (p.tr === mine) p.tr[lang] = null; // allow another try later
+      }
+    })();
+  },
+
+  /** Translate one paragraph for certain: resolves once every sentence of it has its translation, or rejects. */
+  block(block, lang) {
+    const done = () => !!block.translated?.[lang];
+    if (done()) return Promise.resolve();
+    block.trWait ??= {};
+    return block.trWait[lang] ??= (async () => {
+      const token = view.token;
+      const whole = this.page(block.page, lang);
+      const alone = (async () => {
+        if (!(await startClaude())) throw ai.doc?.error || new AiError(ai.available ? 'api' : ai.reason);
+        const { lines } = await ai.translate(block.page.n, this.pieces([block]), lang, languageName(lang));
+        if (token === view.token && !done()) this.apply([block], lines, lang, true);
+      })();
+      // Whichever brings this paragraph first; a failure counts only if neither does.
+      const error = await Promise.race([
+        whole.then(() => (done() ? null : alone.then(() => null, (e) => e))),
+        alone.then(() => null, (e) => whole.then(() => (done() ? null : e))),
+      ]);
+      if (error) { block.trWait[lang] = null; throw error; }
+    })();
+  },
+};
+
 // ── Voice ───────────────────────────────────────────────────────────────────
 
 // The model takes a pacing value when it loads. Measured here: +0.3 speaks at about 0.88x,
@@ -1062,8 +1165,10 @@ const voice = {
 // ── Speech ──────────────────────────────────────────────────────────────────
 
 const segsFor = (block) => chunkBlock(block).map((chunk) => ({ block, chunk, gap: 0 }));
-const spoken = (chunk) => (chunk.join ? glue(chunk.join.map((j) => spoken(j.chunk)))
-  : (!chunk.explain && settings.ai && chunk.aiSay) || chunk.say);
+const spoken = (chunk) => (chunk.explain ? chunk.say
+  : settings.lang ? (chunk.join ?? [{ chunk }]).map((j) => j.chunk.tr?.[targetLang()] || '').filter(Boolean).join(' ')
+  : chunk.join ? glue(chunk.join.map((j) => spoken(j.chunk)))
+  : (settings.ai && chunk.aiSay) || chunk.say);
 
 /**
  * What to voice for a paragraph, from one of its blocks to its last. Where it crosses to the
@@ -1095,9 +1200,9 @@ const BUFFER_AHEAD = 25;   // seconds of audio to keep ready beyond the playhead
 
 /** Where the first sentence in a growing piece of text ends, or 0 if it hasn't yet. */
 function sentenceEnd(buf) {
-  const re = /[.!?]["'”’)\]]*\s+/g;
+  const re = /[.!?]["'”’)\]]*\s+|[。！？]+\s*/g;
   let m;
-  while ((m = re.exec(buf))) if (m.index + m[0].length >= 40) return m.index + m[0].length;
+  while ((m = re.exec(buf))) if (m.index + m[0].length >= (/[。！？]/.test(m[0]) ? 12 : 40)) return m.index + m[0].length;
   return 0;
 }
 
@@ -1122,8 +1227,15 @@ const speaker = {
     block = headOf(block); // a paragraph is read from its start, whichever part of it was picked
     this.halt();
     this.ensureCtx();
+    if (usesSysVoice() && !sysVoice()) {
+      const missing = languageName(settings.lang);
+      setLang('');
+      toast(`This browser has no ${missing} voice, so the text is read as written.`, 6000);
+    }
     const s = this.session = {
       id: ++this.seq, mode, turn, segs: [], next: 0, sched: [], nextTime: 0, cur: -1,
+      // `lang`: the language Claude translates into, if any. `sys`: a system voice speaks, one sentence at a time.
+      lang: targetLang(), sys: usesSysVoice(),
       // A reply is a one-off: it never carries on to the next paragraph.
       busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
       lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null,
@@ -1137,8 +1249,9 @@ const speaker = {
     } else {
       s.segs = paragraphSegs(block);
       for (const b of partsOf(block).reverse()) narration.request(b.page, true);
+      if (s.lang) for (const b of partsOf(block)) translation.page(b.page, s.lang);
     }
-    if (voice.state === 'error') voice.load();
+    if (voice.state === 'error' && !s.sys) voice.load();
     renderPlayer();
     this.pump();
   },
@@ -1171,6 +1284,7 @@ const speaker = {
     }
     s.paused = !s.paused;
     if (s.paused) this.ctx.suspend(); else this.ctx.resume();
+    if (s.sys) { if (s.paused) synth.pause(); else synth.resume(); }
     renderPlayer();
   },
 
@@ -1201,6 +1315,7 @@ const speaker = {
       const end = tailOf(block);
       await ai.explain({
         page: block.page.n, text: paragraphText(block), question: turn.question, history: chat.before(turn), signal,
+        lang: s.lang, language: s.lang ? languageName(s.lang) : '',
         before: block.page.blocks?.[block.index - 1]?.text.slice(-500) || '',
         after: end.page.blocks?.[end.index + 1]?.text.slice(0, 500) || '',
         onText: (delta) => {
@@ -1223,7 +1338,7 @@ const speaker = {
   /** Voice the next sentence, unless enough audio is already queued or something it needs isn't ready. */
   pump() {
     const s = this.session;
-    if (!s || s.busy || voice.state !== 'ready') return;
+    if (!s || s.busy || (!s.sys && voice.state !== 'ready')) return;
     const ahead = s.sched.length ? s.nextTime - this.ctx.currentTime : 0;
     if (s.next >= s.segs.length) {
       if (s.streaming || s.extending || s.exhausted || !settings.keepReading) return;
@@ -1233,8 +1348,25 @@ const speaker = {
     }
     if (ahead > BUFFER_AHEAD) return;
     const idx = s.next, id = s.id, seg = s.segs[idx];
+    if (s.lang && !seg.chunk.explain) {
+      // Nothing is said until Claude's translation of it is in.
+      const b = (seg.chunk.join ?? [seg]).find((j) => j.chunk.tr?.[s.lang] == null)?.block;
+      if (b) {
+        if (s.waitPage !== b) {
+          s.waitPage = b;
+          const mine = () => this.session === s && s.id === id && s.waitPage === b;
+          translation.block(b, s.lang).then(
+            () => { if (mine()) { s.waitPage = null; renderPlayer(); this.pump(); } },
+            (e) => { if (mine()) { this.stop(); toast(`Couldn’t translate this passage. ${e.message || ''}`, 6000); } },
+          );
+          renderPlayer();
+        }
+        return;
+      }
+      if (!spoken(seg.chunk)) { s.next = idx + 1; this.pump(); return; } // a page number, a stray label
+    }
     const block = (seg.chunk.join?.map((j) => j.block) ?? [seg.block]).find((b) => !narration.settled(b));
-    if (seg.chunk.notation && usingClaude() && block) {
+    if (!s.lang && seg.chunk.notation && usingClaude() && block) {
       // Claude is still working out how this should be spoken: wait for it rather than read "E4".
       if (s.waitPage !== block) {
         s.waitPage = block;
@@ -1251,6 +1383,7 @@ const speaker = {
       return;
     }
     s.busy = true;
+    if (s.sys) { this.say(s, idx); return; }
     const signal = s.synthAbort.signal;
     voice.synth(spoken(seg.chunk), settings.voice, signal).then(
       (audio) => {
@@ -1279,7 +1412,32 @@ const speaker = {
     const segs = paragraphSegs(b);
     segs[0].gap = 0.35; // a breath between paragraphs
     s.segs.push(...segs);
+    if (s.lang) for (const part of partsOf(b)) translation.page(part.page, s.lang);
     this.pump();
+  },
+
+  /**
+   * Speak one sentence with a system voice. These play themselves and can't be queued against
+   * the audio clock, so each gets a place in `sched` that is simply current until it has ended.
+   */
+  say(s, idx) {
+    const seg = s.segs[idx], id = s.id, v = sysVoice();
+    const u = s.utterance = new SpeechSynthesisUtterance(spoken(seg.chunk)); // held, or its events can be lost
+    if (v) u.voice = v;
+    u.lang = v ? v.lang : s.lang;
+    u.rate = settings.speed;
+    const entry = { start: 0, end: Infinity, seg, src: null, times: null };
+    const live = () => this.session === s && s.id === id;
+    u.onstart = () => { if (live() && !s.sched.includes(entry)) { s.sched.push(entry); this.tick(); } };
+    u.onend = u.onerror = () => {
+      if (!live() || entry.end === 0) return;
+      if (!s.sched.includes(entry)) s.sched.push(entry);
+      entry.end = 0;
+      s.busy = false;
+      s.next = idx + 1;
+      this.pump();
+    };
+    synth.speak(u);
   },
 
   onAudio(s, idx, { pcm, rate }) {
@@ -1295,7 +1453,7 @@ const speaker = {
       src.connect(ctx.destination);
       const start = Math.max(s.nextTime + seg.gap, ctx.currentTime + 0.05, s.notBefore);
       src.start(start);
-      const words = seg.chunk.start == null ? [] : chunkWords(seg.block, seg.chunk);
+      const words = seg.chunk.start == null || s.lang ? [] : chunkWords(seg.block, seg.chunk); // translated words aren't the page's
       const times = words.length ? wordTimes(words.map((w) => w.part), pcm, rate) : null;
       s.sched.push({ start, end: start + buf.duration, seg, src, times });
       s.nextTime = start + buf.duration;
@@ -1319,6 +1477,7 @@ const speaker = {
     if (cur !== s.cur) {
       s.cur = cur;
       if (cur >= 0) setActive(s.sched[cur].seg.block, s.sched[cur].seg.chunk, true, s.mode);
+      if (cur >= 0 && s.lang) sentenceMark.show(s.sched[cur].seg);
       renderPlayer();
     }
     if (cur >= 0) wordMark.follow(s.sched[cur], t);
@@ -1334,10 +1493,14 @@ const speaker = {
     const from = s.cur >= 0 ? Math.max(0, s.segs.indexOf(s.sched[s.cur].seg)) : 0;
     this.silence(s.sched);
     s.synthAbort.abort();
+    const wasSys = s.sys;
     Object.assign(s, {
       id: ++this.seq, segs: s.segs.slice(from), next: 0, sched: [], nextTime: 0, cur: -1,
       busy: false, notBefore: 0, waitPage: null, synthAbort: new AbortController(),
+      lang: targetLang(), sys: usesSysVoice(),
     });
+    hush();
+    if (s.paused && (s.sys || wasSys)) { s.paused = false; this.ctx.resume(); } // a system voice, once cut off, can't stay paused
     setActive(this.active, null, false, s.mode);
     renderPlayer();
     this.pump();
@@ -1365,6 +1528,17 @@ const speaker = {
 
   /** Say a short line in a voice, so it can be judged before reading with it. */
   async preview(name) {
+    if (usesSysVoice()) {
+      // A system voice introduces itself with the name of its language, in that language.
+      const v = sysVoice();
+      if (this.session || !v) return;
+      this.stopPreview();
+      const u = this.previewUtterance = new SpeechSynthesisUtterance(languageName(tagOf(v), tagOf(v)));
+      u.voice = v;
+      u.lang = v.lang;
+      synth.speak(u);
+      return;
+    }
     if (this.session || voice.state !== 'ready') return;
     this.ensureCtx();
     this.stopPreview();
@@ -1383,6 +1557,7 @@ const speaker = {
 
   stopPreview() {
     this.previewToken = null;
+    hush();
     try { this.previewSrc?.stop(); } catch {}
     this.previewSrc = null;
   },
@@ -1431,7 +1606,7 @@ function setActive(block, chunk, auto = false, mode = 'read') {
     b.el.classList.toggle('explain', mode === 'explain');
     b.el.classList.toggle('pending', !chunk);
   }
-  if (!block || !chunk || chunk.start == null) wordMark.hide();
+  if (!block || !chunk || chunk.start == null) { wordMark.hide(); sentenceMark.hide(); }
 }
 
 // ── The word being spoken ───────────────────────────────────────────────────
@@ -1587,15 +1762,47 @@ const wordMark = {
   },
 };
 
+/**
+ * In another language the words heard aren't the words on the page, so the mark covers the
+ * whole sentence being spoken instead: one box for each line it runs over.
+ */
+const sentenceMark = {
+  els: [],
+  seg: null,
+
+  show(seg) {
+    if (seg === this.seg) return;
+    this.hide();
+    if (seg.chunk.start == null) return;
+    this.seg = seg;
+    for (const { block, chunk } of seg.chunk.join ?? [seg]) {
+      const padX = block.size * 0.14, padY = block.size * 0.08;
+      for (const r of chunkRects(block, chunk)) {
+        const el = Object.assign(document.createElement('div'), { className: 'word sentence on' });
+        place(el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, block.page);
+        block.page.hl.append(el);
+        this.els.push(el);
+      }
+    }
+  },
+
+  hide() {
+    for (const el of this.els) el.remove();
+    this.els = [];
+    this.seg = null;
+  },
+};
+
 // ── Rendering the controls ──────────────────────────────────────────────────
 
 function renderPlayer() {
   const s = speaker.session;
-  const loading = voice.state === 'loading' && !voice.everReady;
+  const sys = s ? s.sys : usesSysVoice(); // a system voice needs none of the reader's own to be loaded
+  const loading = !sys && voice.state === 'loading' && !voice.everReady;
   const preparing = `Preparing voice… ${voice.pct}%`;
   const explaining = s?.mode === 'explain';
   let text, sub;
-  if (voice.state === 'error') {
+  if (voice.state === 'error' && !sys) {
     text = 'The voice couldn’t load';
     sub = 'The first run needs a connection to download it.';
   } else if (s) {
@@ -1603,7 +1810,7 @@ function renderPlayer() {
     text = seg ? (seg.chunk.explain ? seg.chunk.raw : spoken(seg.chunk))
       : loading ? preparing
       : explaining ? 'Claude is thinking…'
-      : s.waitPage ? 'Claude is preparing this passage…'
+      : s.waitPage ? (s.lang ? `Claude is translating into ${languageName(s.lang)}…` : 'Claude is preparing this passage…')
       : 'Starting…';
     const page = (seg ? seg.block : speaker.active ?? s.lastBlock).page.n;
     sub = `${explaining ? (s.turn.question ? 'Answering · ' : 'Explaining · ') : ''}Page ${page}${s.paused ? ' · Paused' : ''}`;
@@ -1613,13 +1820,15 @@ function renderPlayer() {
   }
   els.playBtn.title = s && s.cur >= 0 ? sub : `${text} — ${sub}`; // the bar has no room for words
   els.player.classList.toggle('playing', !!s && !s.paused);
-  els.player.classList.toggle('waiting', !!s && !s.paused && s.cur < 0 && voice.state !== 'error');
+  els.player.classList.toggle('waiting', !!s && !s.paused && s.cur < 0 && (sys || voice.state !== 'error'));
   els.player.classList.toggle('explaining', explaining);
   els.playBtn.setAttribute('aria-label', s && !s.paused ? 'Pause' : 'Play');
-  els.retryBtn.hidden = voice.state !== 'error';
+  els.retryBtn.hidden = voice.state !== 'error' || sys;
   els.stopBtn.hidden = !s;
   els.prevBtn.disabled = els.nextBtn.disabled = !s;
-  els.voiceBtn.textContent = settings.voice.split(' ').slice(0, 2).join(' ');
+  els.voiceBtn.textContent = usesSysVoice() ? (sysVoice()?.name.split(/[ (]/)[0] || 'Voice') : settings.voice.split(' ').slice(0, 2).join(' ');
+  els.langBtn.setAttribute('aria-pressed', !!settings.lang);
+  els.langBtn.title = settings.lang ? `Reading in ${languageName(settings.lang)}, translated by Claude` : 'Read aloud in another language';
   els.progress.style.height = voice.pct + '%';
   els.progress.classList.toggle('done', !loading);
   if (location.protocol !== 'file:') {
@@ -1656,27 +1865,39 @@ function openKeyDialog() {
   els.keyDialog.showModal();
 }
 
+function menuItem(data, title, tags, about) {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'voice-item';
+  item.setAttribute('role', 'radio');
+  Object.assign(item.dataset, data);
+  const name = document.createElement('b');
+  name.textContent = title;
+  const small = document.createElement('small');
+  small.textContent = tags;
+  const span = document.createElement('span');
+  span.textContent = about;
+  item.append(name, small, span);
+  return item;
+}
+const menuHead = (text) => Object.assign(document.createElement('div'), { className: 'voice-group', textContent: text });
+
+/** The voices to choose from: the reader's own or, for another language, the system's voices for it. */
 function buildVoiceMenu() {
   const nodes = [];
-  for (const group of ['American', 'British', 'Characters']) {
-    const head = document.createElement('div');
-    head.className = 'voice-group';
-    head.textContent = group;
-    nodes.push(head);
-    for (const v of VOICES.filter((x) => x.group === group)) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'voice-item';
-      item.setAttribute('role', 'radio');
-      item.dataset.voice = v.name;
-      const name = document.createElement('b');
-      name.textContent = v.name;
-      const tags = document.createElement('small');
-      tags.textContent = v.tags;
-      const about = document.createElement('span');
-      about.textContent = v.about;
-      item.append(name, tags, about);
-      nodes.push(item);
+  if (usesSysVoice()) {
+    const all = voicesFor(settings.lang);
+    for (const tag of [...new Set(all.map(tagOf))].sort()) {
+      nodes.push(menuHead(languageName(tag)));
+      for (const v of all.filter((x) => tagOf(x) === tag)) {
+        nodes.push(menuItem({ uri: v.voiceURI }, v.name.replace(/\s*\(.*\)$/, ''), v.localService ? 'On this device' : 'Online',
+          v.localService ? '' : 'The text is sent to the voice’s provider to be spoken.'));
+      }
+    }
+  } else {
+    for (const group of ['American', 'British', 'Characters']) {
+      nodes.push(menuHead(group));
+      for (const v of VOICES.filter((x) => x.group === group)) nodes.push(menuItem({ voice: v.name }, v.name, v.tags, v.about));
     }
   }
   els.voiceMenu.replaceChildren(...nodes);
@@ -1684,9 +1905,53 @@ function buildVoiceMenu() {
 }
 
 function markVoice() {
+  const uri = sysVoice()?.voiceURI;
   for (const item of els.voiceMenu.querySelectorAll('.voice-item')) {
-    item.setAttribute('aria-checked', item.dataset.voice === settings.voice);
+    item.setAttribute('aria-checked', item.dataset.uri ? item.dataset.uri === uri : item.dataset.voice === settings.voice);
   }
+}
+
+/** The languages to read in: as written, English, and each language the system has a voice for. */
+function buildLangMenu() {
+  const langs = [...new Set(sysVoices.map((v) => baseOf(tagOf(v))))].filter((l) => l !== 'en' && /^[a-z]{2,3}$/.test(l))
+    .sort((a, b) => languageName(a).localeCompare(languageName(b)));
+  const nodes = [
+    menuItem({ lang: '' }, 'As written', '', 'Read the text as it is on the page.'),
+    menuHead('Translated by Claude'),
+    menuItem({ lang: 'en' }, 'English', '', 'For a document in another language. Spoken by the reader’s own voices.'),
+    ...langs.map((l) => menuItem({ lang: l }, languageName(l), languageName(l, l), '')),
+  ];
+  if (!langs.length) nodes.push(Object.assign(menuHead(synth ? 'This browser has no voices for other languages' : 'This browser can’t speak other languages'), { style: 'text-transform: none; letter-spacing: 0' }));
+  els.langMenu.replaceChildren(...nodes);
+  markLang();
+}
+
+function markLang() {
+  for (const item of els.langMenu.querySelectorAll('.voice-item')) item.setAttribute('aria-checked', item.dataset.lang === settings.lang);
+}
+
+/** Choose the language to read in ('' for as written). Translation is Claude's work, so it needs Claude. */
+function setLang(lang) {
+  if (lang && !ai.available) {
+    if (ai.reason === 'no_key') openKeyDialog(); else toast(ai.offMessage, 6000);
+    return;
+  }
+  if (lang === settings.lang) return;
+  settings.lang = lang;
+  saveSettings();
+  buildVoiceMenu();
+  markLang();
+  const s = speaker.session;
+  if (s?.mode === 'read') speaker.restart(); else if (s) speaker.stop(); // a reply already given stays in its language
+  renderPlayer();
+  toast(lang ? `Reading aloud in ${languageName(lang)}, translated by Claude.` : 'Reading the text as written.', 3000);
+}
+
+function refreshSysVoices() {
+  sysVoices = synth ? synth.getVoices().filter((v) => v.lang) : [];
+  buildLangMenu();
+  buildVoiceMenu();
+  renderPlayer();
 }
 
 // ── Chatting with Claude about a paragraph ──────────────────────────────────
@@ -1800,7 +2065,8 @@ for (const sp of SPEEDS) els.speedSel.add(new Option(`${sp}×`, sp));
 els.speedSel.value = settings.speed;
 els.keepBtn.setAttribute('aria-pressed', settings.keepReading);
 document.documentElement.style.setProperty('--zoom', settings.zoom);
-buildVoiceMenu();
+refreshSysVoices();
+synth?.addEventListener?.('voiceschanged', refreshSysVoices); // they arrive late in most browsers
 
 els.pages.addEventListener('click', (e) => {
   const b = blockOf.get(e.target);
@@ -1843,12 +2109,18 @@ els.speedSel.addEventListener('change', () => {
 els.voiceMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  settings.voice = item.dataset.voice;
+  if (item.dataset.uri) settings.sysVoices[settings.lang] = item.dataset.uri; else settings.voice = item.dataset.voice;
   saveSettings();
   markVoice();
   els.voiceMenu.hidePopover();
   renderPlayer();
   if (speaker.session) speaker.restart(); else speaker.preview(settings.voice);
+});
+els.langMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('.voice-item');
+  if (!item) return;
+  els.langMenu.hidePopover();
+  setLang(item.dataset.lang);
 });
 els.voiceMenu.addEventListener('toggle', (e) => {
   if (e.newState === 'open') els.voiceMenu.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: 'center' });

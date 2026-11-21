@@ -81,8 +81,8 @@ MAX_TEXT = 8 * 1024 * 1024
 SYSTEM = (
     "You work inside a read-aloud app for PDF documents. A listener hears your words through a "
     "text-to-speech voice while following the page with their eyes. Whatever you write to be spoken "
-    "is heard and never seen, so it has to be plain spoken English: no markdown, no LaTeX, no symbols "
-    "a voice cannot say. The complete document is attached to every request. Text extracted from a PDF "
+    "is heard and never seen, so it has to be plain spoken language, in English unless the task names "
+    "another language: no markdown, no LaTeX, no symbols a voice cannot say. The complete document is attached to every request. Text extracted from a PDF "
     "loses superscripts, subscripts, fractions and special symbols, so when the extracted text and the "
     "document disagree, trust what the document shows.\n\n"
     "How mathematics and notation are spoken\n"
@@ -139,6 +139,27 @@ Page {page} pieces:
 
 Answer with one JSON object and nothing else, in this shape: {{"changes": [{{"id": "5.1", "say": "..."}}], "skip": [0, 13]}}. Use empty lists when there is nothing to report."""
 
+TRANSLATE = """Task: translate page {page} into {language} for reading aloud.
+
+Below is the text of page {page} as the app extracted it, already cut into the pieces it will speak one after another. Each piece has an id such as 12.1 (block 12, piece 1). Where the app could detect them, ^{{...}} marks a superscript and _{{...}} marks a subscript.
+
+The listener wants to hear this document in {language}. For every piece, write what the voice should say in {language}: a faithful, natural translation, the way a good translator would put it for someone listening, neither word for word nor a summary. In this task your spoken text is not English: write {language} only, in its usual script.
+- Each piece is translated under its own id, because the app marks on the page the piece being spoken. Never merge pieces, and never move content from one piece into another. A piece can begin or end in the middle of a sentence, where a column or a page breaks: translate just that fragment, worded so that it runs on from the piece before it and into the piece after it.
+- Mathematics, formulas and notation are said the way a {language} speaker would say them aloud to a colleague, following the rules you were given, carried over into {language}. Numbers, units and abbreviations become the words a {language} speaker says.
+- Repair damage from extraction (words glued together or broken apart, a formula whose parts came out scrambled) from the document before translating. Citation and footnote markers such as [12] are not spoken, so leave them out; where the sentence leans on the marker as if it were a word, say the {language} for "reference 12" there.
+- Names of people, places and products stay as they are, and so do the titles of cited works. A technical term takes its established {language} equivalent where there is one, and otherwise stays in the original.
+- A piece that is already in {language} is returned as it should be spoken, changed only as the points above require.
+- A piece with nothing to say aloud (a page number, a stray label, a lone symbol from inside a figure) gets an empty string.
+
+Page {page} pieces:
+{pieces}
+
+Answer with one JSON object and nothing else, in this shape: {{"lines": [{{"id": "5.0", "say": "..."}}, {{"id": "5.1", "say": "..."}}]}}, with one entry for every piece, in the order given."""
+
+IN_LANGUAGE = """
+
+The listener is hearing this document in {language}, through a voice that speaks only {language}. Give your whole reply in {language}, in its usual script, and say any notation the way a {language} speaker would."""
+
 LAYOUT = """Task: find the paragraphs on page {page}.
 
 Below is every line of text the app extracted from page {page}, in the order the PDF stores them. Each has an id, where it sits (x and y of its left end, in points from the top-left corner of the page, and its type size) and its text, with ^{{...}} around a superscript and _{{...}} around a subscript where the app could tell. Extraction is rough: the pieces of a formula (a numerator, a denominator, a limit, an equation number) come out as separate short lines, a table comes out cell by cell, and the stored order is not always the reading order. Look at the page itself in the document to see what belongs together.
@@ -182,6 +203,14 @@ class ApiError(Exception):
     def __init__(self, status, code, message):
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
+
+
+def language_of(lang, language):
+    """A language tag and its English name as the page sent them, checked: both end up in a prompt, and the tag in a file name."""
+    lang, language = str(lang), " ".join(str(language).split())
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}", lang) or not re.fullmatch(r"[^\W\d_](?:[^\W_]|[ ()',.-]){1,59}", language):
+        raise ApiError(400, "bad_request", "Unknown language.")
+    return lang, language
 
 
 def load_env_file():
@@ -497,13 +526,40 @@ class Claude:
         write_json(path, result)
         return result
 
-    def explain(self, sha, page, text, before, after, on_text, question="", history=()):
+    def translate(self, sha, page, pieces, lang, language):
+        """Every piece of a page (or of one paragraph of it) as it should be spoken in another language. → {"lines": [{id, say}]}"""
+        lang, language = language_of(lang, language)
+        pieces = [(str(p["id"]), str(p["text"])) for p in pieces]
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, lang, pieces]).encode()).hexdigest()[:16]
+        path = self.doc_dir(sha) / "translated" / f"{page}-{lang}-{key}.json"
+        cached = read_json(path)
+        if cached:
+            return cached
+        task = TRANSLATE.format(page=page, language=language, pieces="\n".join(f"{i}: {t}" for i, t in pieces))
+        data = parse_json_answer(self.run(sha, f"translate page {page} into {language}", task))
+        known = dict(pieces)
+        result = {"lines": [
+            {"id": ln["id"], "say": " ".join(ln["say"].split())}
+            for ln in data.get("lines", [])
+            # Some languages run longer than others, but not many times longer.
+            if isinstance(ln, dict) and ln.get("id") in known and isinstance(ln.get("say"), str) and len(ln["say"]) <= 8 * len(known[ln["id"]]) + 200
+        ]}
+        if pieces and not result["lines"]:
+            raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.")
+        write_json(path, result)
+        return result
+
+    def explain(self, sha, page, text, before, after, on_text, question="", history=(), lang="", language=""):
         """Explain a paragraph aloud or, given a question about it, answer that instead.
 
         `history` is the conversation about this paragraph so far, as (question, answer) pairs;
         with it, `question` is a follow-up and Claude sees the earlier turns.
         """
-        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text] + ([question] if question else [])).encode()).hexdigest()[:16]
+        suffix = ""
+        if lang:
+            lang, language = language_of(lang, language)
+            suffix = IN_LANGUAGE.format(language=language)
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text] + ([question] if question else []) + ([lang] if lang else [])).encode()).hexdigest()[:16]
         path = self.doc_dir(sha) / "explain" / f"{key}.json"
         cached = None if history else read_json(path)  # a follow-up depends on what was said before it
         if cached:
@@ -515,14 +571,14 @@ class Claude:
                       "\nand the text just after it is:\n" + (after or "(nothing)") + "\n"
         first = history[0][0] if history else question  # what opened the conversation
         if first:
-            label, task = "answer a question", ASK.format(page=page, context=context, text=text, question=first)
+            label, task = "answer a question", ASK.format(page=page, context=context, text=text, question=first) + suffix
         else:
-            label, task = "explain a paragraph", EXPLAIN.format(page=page, context=context, text=text)
+            label, task = "explain a paragraph", EXPLAIN.format(page=page, context=context, text=text) + suffix
         turns = []
         for i, (_, said) in enumerate(history):
             then = history[i + 1][0] if i + 1 < len(history) else question
             turns.append({"role": "assistant", "content": said})
-            turns.append({"role": "user", "content": FOLLOW_UP.format(question=then or "Explain this paragraph.")})
+            turns.append({"role": "user", "content": FOLLOW_UP.format(question=then or "Explain this paragraph.") + suffix})
         if history:
             label = "answer a follow-up"
         answer = self.run(sha, f"{label} on page {page}", task, on_text, turns)
@@ -669,6 +725,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(claude.layout(req["doc"], int(req["page"]), req["lines"]))
             if url.path == "/api/narrate":
                 return self._json(claude.narrate(req["doc"], int(req["page"]), req["pieces"]))
+            if url.path == "/api/translate":
+                return self._json(claude.translate(req["doc"], int(req["page"]), req["pieces"], req["lang"], req["language"]))
             if url.path == "/api/explain":
                 return self._explain(req)
             self._json({"error": "not_found"}, 404)
@@ -699,7 +757,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                            str(req.get("before", ""))[:600], str(req.get("after", ""))[:600], on_text,
                            clean(req.get("question", ""))[:1000],
                            [(clean(h.get("question", ""))[:1000], clean(h.get("answer", ""))[:6000])
-                            for h in req.get("history", [])[-12:] if clean(h.get("answer", ""))])
+                            for h in req.get("history", [])[-12:] if clean(h.get("answer", ""))],
+                           str(req.get("lang", "")), str(req.get("language", "")))
             if not started:
                 raise ApiError(502, "bad_output", "Claude returned nothing.")
         except ApiError:

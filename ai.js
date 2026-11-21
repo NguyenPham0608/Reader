@@ -185,13 +185,21 @@ export const ai = {
   },
 
   /**
+   * Ask for pieces of a page as they should be spoken in another language: `lang` is its tag
+   * ('fr', 'pt-BR'), `language` its name in English. → { lines: [{id, say}] }, one per piece
+   */
+  translate(page, pieces, lang, language) {
+    return this.withDoc((doc) => postJson('/api/translate', { doc: doc.id, page, pieces, lang, language }, { timeout: 240000 }));
+  },
+
+  /**
    * Stream Claude's spoken reply about one paragraph: an explanation of it or, with a `question`,
    * an answer. `history` is the conversation so far, [{ question, answer }]; `onText` receives
-   * the reply piece by piece.
+   * the reply piece by piece. With `lang` and `language` the reply comes in that language.
    */
-  explain({ page, text, before, after, question = '', history = [], signal, onText }) {
+  explain({ page, text, before, after, question = '', history = [], lang = '', language = '', signal, onText }) {
     return this.withDoc(async (doc) => {
-      const { res, done } = await post('/api/explain', { doc: doc.id, page, text, before, after, question, history }, { signal });
+      const { res, done } = await post('/api/explain', { doc: doc.id, page, text, before, after, question, history, lang, language }, { signal });
       try {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
