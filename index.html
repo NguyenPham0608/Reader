@@ -120,9 +120,8 @@
   }
   .word.on { opacity: 1; }
   .word.jump { transition: none; }
-  .word.sentence { opacity: .7; transition: none; } /* a translated sentence: marked whole, since its words aren't the page's */
-  /* The sentence under the pointer in the paragraph being read: a click reads from it again. */
-  .word.pick { opacity: 1; transition: none; background: rgba(70, 120, 255, .13); box-shadow: inset 0 0 0 1.5px rgba(40, 90, 220, .85); }
+  /* The sentence being read, boxed line by line; and, the same, the one under the pointer that a click would read again. */
+  .word.sentence, .word.pick { opacity: 1; transition: none; background: rgba(70, 120, 255, .13); box-shadow: inset 0 0 0 1.5px rgba(40, 90, 220, .85); }
   .blk {
     position: absolute; padding: 0; border: 0; border-radius: 9px; background: transparent;
     mix-blend-mode: multiply; transition: background .22s ease; -webkit-tap-highlight-color: transparent;

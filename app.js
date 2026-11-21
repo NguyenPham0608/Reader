@@ -1574,7 +1574,7 @@ const speaker = {
     if (cur !== s.cur) {
       s.cur = cur;
       if (cur >= 0) setActive(s.sched[cur].seg.block, s.sched[cur].seg.chunk, true, s.mode);
-      if (cur >= 0 && s.lang) sentenceMark.show(s.sched[cur].seg);
+      if (cur >= 0) sentenceMark.show(s.sched[cur].seg);
       renderPlayer();
     }
     if (cur >= 0) wordMark.follow(s.sched[cur], t);
