@@ -248,6 +248,16 @@
     transform: translate(-50%, -12px); opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease;
   }
   .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  /* The sentence being read, in the language it is read in. */
+  .caption {
+    position: fixed; left: 50%; bottom: 18px; z-index: 28; transform: translateX(-50%);
+    width: max-content; max-width: min(760px, calc(100vw - 180px)); padding: 10px 18px 12px; text-align: center;
+    border-radius: 16px; background: var(--panel); border: 1px solid var(--line); pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 18px 44px -12px rgba(0, 0, 0, .28);
+    -webkit-backdrop-filter: saturate(1.6) blur(20px); backdrop-filter: saturate(1.6) blur(20px);
+  }
+  .caption small { display: block; margin-bottom: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .55; }
+  .caption p { margin: 0; font-size: 17px; line-height: 1.45; text-wrap: balance; }
 
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
   @keyframes slide-up { from { opacity: 0; transform: translate(-50%, 24px); } }
@@ -333,6 +343,9 @@
   <button class="icon-btn" id="langBtn" popovertarget="langMenu" aria-pressed="false" title="Read aloud in another language" aria-label="Language to read in">
     <svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2M11 6c-.6 3.4-3 6.3-6.5 8M6.5 9.5c1 1.9 2.8 3.5 5 4.5M12.5 20l3.75-9L20 20M13.8 17h4.9"/></svg>
   </button>
+  <button class="icon-btn" id="capBtn" aria-pressed="false" title="Show the sentence being read, in the language it is read in" aria-label="Show the sentence being read" hidden>
+    <svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M7 11h5M14.5 11H17M7 14.5h2.5M12 14.5h5"/></svg>
+  </button>
   <button class="pill-btn" id="voiceBtn" popovertarget="voiceMenu" title="Voice" aria-label="Voice"></button>
   <select id="speedSel" title="Speed" aria-label="Speed"></select>
   <button class="icon-btn" id="stopBtn" title="Stop (Esc)" aria-label="Stop" hidden><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
@@ -356,6 +369,7 @@
 </dialog>
 
 <div class="veil" id="veil">Drop to open</div>
+<div class="caption" id="caption" hidden><small id="captionLang"></small><p id="captionText"></p></div>
 <div class="toast" id="toast" role="status"></div>
 <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
 

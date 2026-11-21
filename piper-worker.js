@@ -24,11 +24,37 @@ async function init({ config: c, model, ortWasm, ppWasm, ppData }) {
   session = await ort.InferenceSession.create(model, { executionProviders: ['wasm'] });
 }
 
-/** Text → the ids of its phonemes, as the model was trained on them. */
-function phonemeIds(text) {
+/** Text → the ids of its phonemes in one language, as the model was trained on them: ^ (1), then each phoneme followed by a pad (0), then $ (2). */
+function phonemesIn(text, lang) {
   printed.length = 0;
-  phonemizer.callMain(['-l', config.espeak.voice, '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']);
+  phonemizer.callMain(['-l', lang, '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']);
   return printed.flatMap((line) => { try { return JSON.parse(line).phoneme_ids || []; } catch { return []; } });
+}
+
+// AI, GDP, mRNA, U.S.: capitals that a voice in another language would spell out in its own
+// letters, or read as a word of its own. These are said the English way instead.
+const ABBREVIATION = /(?<![\p{L}\p{N}])(?:[a-z]?[A-Z][A-Z0-9]*[A-Z][A-Z0-9]*s?|(?:[A-Z]\.){2,})(?![\p{L}\p{N}])/gu;
+const SPACE = 3;
+
+function phonemeIds(text) {
+  const own = config.espeak.voice;
+  const found = own.startsWith('en') ? [] : [...text.matchAll(ABBREVIATION)];
+  // With no lower case left around them, the capitals are a heading rather than abbreviations.
+  if (!found.length || !/\p{Ll}/u.test(text.replace(ABBREVIATION, ''))) return phonemesIn(text, own);
+  const out = [];
+  const add = (part, lang) => {
+    if (!/[\p{L}\p{N}]/u.test(part)) return;
+    const ids = phonemesIn(part, lang).filter((id, i, all) => id > 2 || (id === 0 && all[i - 1] > 2)); // its phonemes and their pads
+    if (ids.length) out.push(...(out.length ? [SPACE, 0] : []), ...ids);
+  };
+  let at = 0;
+  for (const m of found) {
+    add(text.slice(at, m.index), own);
+    add(m[0], 'en-us');
+    at = m.index + m[0].length;
+  }
+  add(text.slice(at), own);
+  return [1, 0, ...out, 2];
 }
 
 async function synth(text) {

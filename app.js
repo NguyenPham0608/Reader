@@ -12,6 +12,7 @@ const els = {
   bar: $('bar'), docTitle: $('docTitle'), pageInd: $('pageInd'), welcome: $('welcome'), pages: $('pages'),
   player: $('player'), playBtn: $('playBtn'), retryBtn: $('retryBtn'),
   prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'), langBtn: $('langBtn'), langMenu: $('langMenu'),
+  capBtn: $('capBtn'), caption: $('caption'), captionLang: $('captionLang'), captionText: $('captionText'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
   chat: $('chat'), chatLog: $('chatLog'), chatForm: $('chatForm'), chatInput: $('chatInput'),
@@ -26,7 +27,7 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {} };
+const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, captions: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
@@ -1886,6 +1887,17 @@ function renderPlayer() {
   els.voiceBtn.textContent = neuralFor() ? neuralFor().name : usesSysVoice() ? (sysVoice()?.name.split(/[ (]/)[0] || 'Voice') : settings.voice.split(' ').slice(0, 2).join(' ');
   els.langBtn.setAttribute('aria-pressed', !!settings.lang);
   els.langBtn.title = settings.lang ? `Reading in ${languageName(settings.lang)}, translated by Claude` : 'Read aloud in another language';
+  // The sentence box: what is being said, in the language it is said in, while reading in translation.
+  const said = settings.captions && s?.mode === 'read' && s.lang && s.cur >= 0 ? s.sched[s.cur].seg : null;
+  els.caption.hidden = !said;
+  if (said) {
+    const words = spoken(said.chunk);
+    if (els.captionText.textContent !== words) els.captionText.textContent = words;
+    els.captionText.lang = s.lang;
+    els.captionLang.textContent = languageName(s.lang);
+  }
+  els.capBtn.hidden = !settings.lang;
+  els.capBtn.setAttribute('aria-pressed', !!settings.captions);
   els.progress.style.height = (sys ? 100 : engine.pct) + '%';
   els.progress.classList.toggle('done', !loading);
   if (location.protocol !== 'file:') {
@@ -2153,6 +2165,12 @@ els.stopBtn.addEventListener('click', () => speaker.stop());
 els.prevBtn.addEventListener('click', () => speaker.skip(-1));
 els.nextBtn.addEventListener('click', () => speaker.skip(1));
 els.retryBtn.addEventListener('click', () => engineFor(speaker.session).load());
+els.capBtn.addEventListener('click', () => {
+  settings.captions = !settings.captions;
+  saveSettings();
+  renderPlayer();
+  toast(settings.captions ? 'Sentence box: on — shows each sentence in the language it is read in.' : 'Sentence box: off.', 2200);
+});
 els.keepBtn.addEventListener('click', () => {
   settings.keepReading = !settings.keepReading;
   els.keepBtn.setAttribute('aria-pressed', settings.keepReading);

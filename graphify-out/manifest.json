@@ -1,12 +1,12 @@
 {
   "app.js": {
-    "mtime": 1795236870.7167697,
-    "ast_hash": "5180dacecd22c13f4c790ec87de68cf8",
+    "mtime": 1795237359.2997599,
+    "ast_hash": "d1f155497d4b19067113438a34ed0558",
     "semantic_hash": ""
   },
   "serve.py": {
-    "mtime": 1795230983.0418484,
-    "ast_hash": "028126c2c40ee92213f7c46ca06c67e6",
+    "mtime": 1795237440.4458437,
+    "ast_hash": "f1573705e753a5640a66f2827805046c",
     "semantic_hash": ""
   },
   "vendor/pdfjs/pdf.min.mjs": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795231153.4228222,
-    "ast_hash": "932625f3a4e1fb9e229744a5e8da3298",
+    "mtime": 1795237359.2993913,
+    "ast_hash": "e7d9295a02f3d222d6b79d4136675a21",
     "semantic_hash": ""
   },
   "ai.js": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "piper-worker.js": {
-    "mtime": 1795236717.0985274,
-    "ast_hash": "1230f0b1d0271f1d4704fb1e25091c08",
+    "mtime": 1795237359.2989795,
+    "ast_hash": "b97d663caabfee701267cc6a748b88fe",
     "semantic_hash": ""
   },
   "piper.js": {

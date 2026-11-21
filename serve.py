@@ -71,6 +71,7 @@ MODEL = "claude-sonnet-5-5"
 # If Claude's safety classifiers decline a request, the API retries it on a fallback model.
 BETAS = ["server-side-fallback-2026-07-01"]
 PROMPT_VERSION = "4"  # bump to stop using answers cached under older prompts
+TRANSLATE_VERSION = "2"  # the same, for translations and replies in another language only
 # Sonnet 5.5 prices in dollars per million tokens (cache writes at the 1-hour rate), for the daily cap.
 PRICE = {"input": 2.0, "cache_write": 4.0, "cache_read": 0.10, "output": 10.0}
 WARM_FOR = 50 * 60  # seconds a document's prompt cache is assumed alive (it is written with a 1-hour lifetime)
@@ -145,7 +146,7 @@ Below is the text of page {page} as the app extracted it, already cut into the p
 
 The listener wants to hear this document in {language}. For every piece, write what the voice should say in {language}: a faithful, natural translation, the way a good translator would put it for someone listening, neither word for word nor a summary. In this task your spoken text is not English: write {language} only, in its usual script.
 - Each piece is translated under its own id, because the app marks on the page the piece being spoken. Never merge pieces, and never move content from one piece into another. A piece can begin or end in the middle of a sentence, where a column or a page breaks: translate just that fragment, worded so that it runs on from the piece before it and into the piece after it.
-- Mathematics, formulas and notation are said the way a {language} speaker would say them aloud to a colleague, following the rules you were given, carried over into {language}. Numbers, units and abbreviations become the words a {language} speaker says.
+- Mathematics, formulas and notation are said the way a {language} speaker would say them aloud to a colleague, following the rules you were given, carried over into {language}. Numbers, units and ordinary abbreviations (Fig., e.g., etc.) become the words a {language} speaker says. Acronyms and initialisms written in capitals (AI, DNA, GDP, WHO, mRNA) are different: keep them exactly as written, in their Latin capitals, neither translated nor expanded nor spelled out in {language} letters, because the voice says them the English way.
 - Repair damage from extraction (words glued together or broken apart, a formula whose parts came out scrambled) from the document before translating. Citation and footnote markers such as [12] are not spoken, so leave them out; where the sentence leans on the marker as if it were a word, say the {language} for "reference 12" there.
 - Names of people, places and products stay as they are, and so do the titles of cited works. A technical term takes its established {language} equivalent where there is one, and otherwise stays in the original.
 - A piece that is already in {language} is returned as it should be spoken, changed only as the points above require.
@@ -158,7 +159,7 @@ Answer with one JSON object and nothing else, in this shape: {{"lines": [{{"id":
 
 IN_LANGUAGE = """
 
-The listener is hearing this document in {language}, through a voice that speaks only {language}. Give your whole reply in {language}, in its usual script, and say any notation the way a {language} speaker would."""
+The listener is hearing this document in {language}, through a voice that speaks only {language}. Give your whole reply in {language}, in its usual script, and say any notation the way a {language} speaker would. Acronyms written in capitals (AI, DNA, GDP) stay exactly as written: the voice says them the English way."""
 
 LAYOUT = """Task: find the paragraphs on page {page}.
 
@@ -231,7 +232,8 @@ def read_json(path):
 
 def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # Its own name for each writer: two requests for the same answer can finish together.
+    tmp = path.with_suffix(f"{path.suffix}.{threading.get_ident()}.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False))
     tmp.replace(path)
 
@@ -530,7 +532,7 @@ class Claude:
         """Every piece of a page (or of one paragraph of it) as it should be spoken in another language. → {"lines": [{id, say}]}"""
         lang, language = language_of(lang, language)
         pieces = [(str(p["id"]), str(p["text"])) for p in pieces]
-        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, lang, pieces]).encode()).hexdigest()[:16]
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, TRANSLATE_VERSION, page, lang, pieces]).encode()).hexdigest()[:16]
         path = self.doc_dir(sha) / "translated" / f"{page}-{lang}-{key}.json"
         cached = read_json(path)
         if cached:
@@ -559,7 +561,7 @@ class Claude:
         if lang:
             lang, language = language_of(lang, language)
             suffix = IN_LANGUAGE.format(language=language)
-        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text] + ([question] if question else []) + ([lang] if lang else [])).encode()).hexdigest()[:16]
+        key = hashlib.sha1(json.dumps([PROMPT_VERSION, page, text] + ([question] if question else []) + ([lang, TRANSLATE_VERSION] if lang else [])).encode()).hexdigest()[:16]
         path = self.doc_dir(sha) / "explain" / f"{key}.json"
         cached = None if history else read_json(path)  # a follow-up depends on what was said before it
         if cached:
