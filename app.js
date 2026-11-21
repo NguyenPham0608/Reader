@@ -1,5 +1,6 @@
 import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
 import { PhononTTS } from './vendor/phonon/index.js';
+import { PIPER_VOICES, PiperVoice } from './piper.js';
 import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
 
@@ -25,13 +26,14 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {} };
+const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
 settings.zoom = Math.min(3, Math.max(0.5, Number(settings.zoom) || 1));
 if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) settings.lang = '';
 if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
+if (!settings.plain || typeof settings.plain !== 'object') settings.plain = {};
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
 
 // ── Reading in another language ─────────────────────────────────────────────
@@ -59,10 +61,12 @@ function sysVoice(lang = settings.lang) {
 }
 /** Silence the system voice. Cancelling one that is paused leaves the next waiting, hence the resume. */
 const hush = () => { synth?.cancel(); synth?.resume(); };
-/** Whether speech comes from a system voice rather than the reader's own. */
-const usesSysVoice = () => !!settings.lang && settings.lang !== 'en';
+/** The reader's neural voice for the language being read in, where it has one and a system voice wasn't preferred (`settings.plain`). */
+const neuralFor = (lang = settings.lang) => (PIPER_VOICES[lang] && !settings.plain[lang] ? PIPER_VOICES[lang] : null);
+/** Whether speech comes from a system voice rather than one of the reader's own. */
+const usesSysVoice = () => !!settings.lang && settings.lang !== 'en' && !neuralFor();
 /** The language being translated into, as specific as the voice is ('pt-BR'), or '' when reading as written. */
-const targetLang = () => (usesSysVoice() ? (sysVoice() ? tagOf(sysVoice()) : settings.lang) : settings.lang);
+const targetLang = () => neuralFor()?.tag ?? (usesSysVoice() ? (sysVoice() ? tagOf(sysVoice()) : settings.lang) : settings.lang);
 
 // ── Text analysis: PDF text items → lines → paragraphs → sentences ──────────
 // Lines come from the PDF. Which lines form a paragraph is Claude's call (see `narration`),
@@ -1162,6 +1166,52 @@ const voice = {
   },
 };
 
+/** The neural voice for another language (see piper.js): loaded when first needed, one language at a time. */
+const neural = {
+  tts: null,
+  spec: null,
+  state: 'idle', // idle | loading | ready | error
+  pct: 0,
+  everReady: false,
+  job: null,
+
+  load(spec = neuralFor()) {
+    if (!spec) return null;
+    if (this.job && this.spec === spec && this.state !== 'error') return this.job;
+    Object.assign(this, { spec, state: 'loading', pct: 0, everReady: false });
+    renderPlayer();
+    const job = this.job = (async () => {
+      try {
+        const tts = await PiperVoice.load(spec, {
+          onProgress: ({ loaded, total }) => { if (this.job === job && total) { this.pct = Math.min(99, Math.floor(100 * loaded / total)); renderPlayer(); } },
+        });
+        if (this.job !== job) { tts.dispose(); return; }
+        this.tts?.dispose();
+        this.tts = tts;
+        this.state = 'ready';
+        this.everReady = true;
+        this.pct = 100;
+      } catch (e) {
+        if (this.job !== job) return;
+        console.error('Voice model failed to load:', e);
+        this.state = 'error';
+      }
+      renderPlayer();
+      speaker.pump();
+    })();
+    return job;
+  },
+
+  /** Speak one piece of text. The model has no reliable pace of its own, so speed is all time-stretching. → { pcm, rate } */
+  async synth(text, signal) {
+    const tts = this.tts;
+    const pcm = await tts.synth(text, signal);
+    return { pcm: timeStretch(pcm, settings.speed, tts.sampleRate), rate: tts.sampleRate };
+  },
+};
+/** Whichever of the reader's own engines speaks now, or would for a session. */
+const engineFor = (s = null) => ((s ? s.neural : neuralFor()) ? neural : voice);
+
 // ── Speech ──────────────────────────────────────────────────────────────────
 
 const segsFor = (block) => chunkBlock(block).map((chunk) => ({ block, chunk, gap: 0 }));
@@ -1235,7 +1285,8 @@ const speaker = {
     const s = this.session = {
       id: ++this.seq, mode, turn, segs: [], next: 0, sched: [], nextTime: 0, cur: -1,
       // `lang`: the language Claude translates into, if any. `sys`: a system voice speaks, one sentence at a time.
-      lang: targetLang(), sys: usesSysVoice(),
+      // `neural`: the reader's neural voice for that language speaks.
+      lang: targetLang(), sys: usesSysVoice(), neural: neuralFor(),
       // A reply is a one-off: it never carries on to the next paragraph.
       busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
       lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null,
@@ -1251,7 +1302,7 @@ const speaker = {
       for (const b of partsOf(block).reverse()) narration.request(b.page, true);
       if (s.lang) for (const b of partsOf(block)) translation.page(b.page, s.lang);
     }
-    if (voice.state === 'error' && !s.sys) voice.load();
+    if (s.neural) neural.load(s.neural); else if (voice.state === 'error' && !s.sys) voice.load();
     renderPlayer();
     this.pump();
   },
@@ -1338,7 +1389,7 @@ const speaker = {
   /** Voice the next sentence, unless enough audio is already queued or something it needs isn't ready. */
   pump() {
     const s = this.session;
-    if (!s || s.busy || (!s.sys && voice.state !== 'ready')) return;
+    if (!s || s.busy || (!s.sys && engineFor(s).state !== 'ready')) return;
     const ahead = s.sched.length ? s.nextTime - this.ctx.currentTime : 0;
     if (s.next >= s.segs.length) {
       if (s.streaming || s.extending || s.exhausted || !settings.keepReading) return;
@@ -1385,7 +1436,8 @@ const speaker = {
     s.busy = true;
     if (s.sys) { this.say(s, idx); return; }
     const signal = s.synthAbort.signal;
-    voice.synth(spoken(seg.chunk), settings.voice, signal).then(
+    const text = spoken(seg.chunk), engine = engineFor(s);
+    (s.neural ? neural.synth(text, signal) : voice.synth(text, settings.voice, signal)).then(
       (audio) => {
         if (this.session !== s || s.id !== id) return;
         s.busy = false;
@@ -1394,7 +1446,7 @@ const speaker = {
       (e) => {
         if (this.session !== s || s.id !== id) return;
         s.busy = false;
-        if (signal.aborted || voice.state !== 'ready') return; // interrupted, not failed: it will be asked again
+        if (signal.aborted || engine.state !== 'ready') return; // interrupted, not failed: it will be asked again
         console.warn('Could not voice a sentence:', e);
         s.next = idx + 1;
         this.pump();
@@ -1497,8 +1549,9 @@ const speaker = {
     Object.assign(s, {
       id: ++this.seq, segs: s.segs.slice(from), next: 0, sched: [], nextTime: 0, cur: -1,
       busy: false, notBefore: 0, waitPage: null, synthAbort: new AbortController(),
-      lang: targetLang(), sys: usesSysVoice(),
+      lang: targetLang(), sys: usesSysVoice(), neural: neuralFor(),
     });
+    if (s.neural) neural.load(s.neural);
     hush();
     if (s.paused && (s.sys || wasSys)) { s.paused = false; this.ctx.resume(); } // a system voice, once cut off, can't stay paused
     setActive(this.active, null, false, s.mode);
@@ -1539,12 +1592,15 @@ const speaker = {
       synth.speak(u);
       return;
     }
-    if (this.session || voice.state !== 'ready') return;
+    const spec = neuralFor();
+    if (spec) neural.load(spec);
+    if (this.session || engineFor().state !== 'ready') return;
     this.ensureCtx();
     this.stopPreview();
     const mine = this.previewToken = {};
     try {
-      const { pcm, rate } = await voice.synth(`Hi, I'm ${name}. This is how I'll read to you.`, name);
+      const { pcm, rate } = await (spec ? neural.synth(languageName(spec.tag, spec.tag))
+        : voice.synth(`Hi, I'm ${name}. This is how I'll read to you.`, name));
       if (this.previewToken !== mine || this.session) return;
       const buf = this.ctx.createBuffer(1, pcm.length, rate);
       buf.getChannelData(0).set(pcm);
@@ -1798,11 +1854,12 @@ const sentenceMark = {
 function renderPlayer() {
   const s = speaker.session;
   const sys = s ? s.sys : usesSysVoice(); // a system voice needs none of the reader's own to be loaded
-  const loading = !sys && voice.state === 'loading' && !voice.everReady;
-  const preparing = `Preparing voice… ${voice.pct}%`;
+  const engine = engineFor(s);
+  const loading = !sys && engine.state === 'loading' && !engine.everReady;
+  const preparing = `Preparing voice… ${engine.pct}%`;
   const explaining = s?.mode === 'explain';
   let text, sub;
-  if (voice.state === 'error' && !sys) {
+  if (engine.state === 'error' && !sys) {
     text = 'The voice couldn’t load';
     sub = 'The first run needs a connection to download it.';
   } else if (s) {
@@ -1816,20 +1873,20 @@ function renderPlayer() {
     sub = `${explaining ? (s.turn.question ? 'Answering · ' : 'Explaining · ') : ''}Page ${page}${s.paused ? ' · Paused' : ''}`;
   } else {
     text = loading ? preparing : 'Click a paragraph to listen';
-    sub = loading ? 'The first run downloads about 65 MB, once.' : 'Double-click one to ask Claude about it';
+    sub = loading ? `The first run downloads about ${engine === neural ? neural.spec.megabytes : 65} MB, once.` : 'Double-click one to ask Claude about it';
   }
   els.playBtn.title = s && s.cur >= 0 ? sub : `${text} — ${sub}`; // the bar has no room for words
   els.player.classList.toggle('playing', !!s && !s.paused);
-  els.player.classList.toggle('waiting', !!s && !s.paused && s.cur < 0 && (sys || voice.state !== 'error'));
+  els.player.classList.toggle('waiting', !!s && !s.paused && s.cur < 0 && (sys || engine.state !== 'error'));
   els.player.classList.toggle('explaining', explaining);
   els.playBtn.setAttribute('aria-label', s && !s.paused ? 'Pause' : 'Play');
-  els.retryBtn.hidden = voice.state !== 'error' || sys;
+  els.retryBtn.hidden = engine.state !== 'error' || sys;
   els.stopBtn.hidden = !s;
   els.prevBtn.disabled = els.nextBtn.disabled = !s;
-  els.voiceBtn.textContent = usesSysVoice() ? (sysVoice()?.name.split(/[ (]/)[0] || 'Voice') : settings.voice.split(' ').slice(0, 2).join(' ');
+  els.voiceBtn.textContent = neuralFor() ? neuralFor().name : usesSysVoice() ? (sysVoice()?.name.split(/[ (]/)[0] || 'Voice') : settings.voice.split(' ').slice(0, 2).join(' ');
   els.langBtn.setAttribute('aria-pressed', !!settings.lang);
   els.langBtn.title = settings.lang ? `Reading in ${languageName(settings.lang)}, translated by Claude` : 'Read aloud in another language';
-  els.progress.style.height = voice.pct + '%';
+  els.progress.style.height = (sys ? 100 : engine.pct) + '%';
   els.progress.classList.toggle('done', !loading);
   if (location.protocol !== 'file:') {
     els.voiceNote.textContent = loading ? preparing
@@ -1885,7 +1942,9 @@ const menuHead = (text) => Object.assign(document.createElement('div'), { classN
 /** The voices to choose from: the reader's own or, for another language, the system's voices for it. */
 function buildVoiceMenu() {
   const nodes = [];
-  if (usesSysVoice()) {
+  const own = PIPER_VOICES[settings.lang];
+  if (own) nodes.push(menuHead('The reader’s own'), menuItem({ neural: '1' }, own.name, 'On this device',`${own.about} The first use downloads about ${own.megabytes} MB.`));
+  if (own || usesSysVoice()) {
     const all = voicesFor(settings.lang);
     for (const tag of [...new Set(all.map(tagOf))].sort()) {
       nodes.push(menuHead(languageName(tag)));
@@ -1905,15 +1964,15 @@ function buildVoiceMenu() {
 }
 
 function markVoice() {
-  const uri = sysVoice()?.voiceURI;
+  const uri = sysVoice()?.voiceURI, own = !!neuralFor();
   for (const item of els.voiceMenu.querySelectorAll('.voice-item')) {
-    item.setAttribute('aria-checked', item.dataset.uri ? item.dataset.uri === uri : item.dataset.voice === settings.voice);
+    item.setAttribute('aria-checked', item.dataset.neural ? own : item.dataset.uri ? !own && item.dataset.uri === uri : item.dataset.voice === settings.voice);
   }
 }
 
-/** The languages to read in: as written, English, and each language the system has a voice for. */
+/** The languages to read in: as written, English, and each language the reader or the system has a voice for. */
 function buildLangMenu() {
-  const langs = [...new Set(sysVoices.map((v) => baseOf(tagOf(v))))].filter((l) => l !== 'en' && /^[a-z]{2,3}$/.test(l))
+  const langs = [...new Set([...Object.keys(PIPER_VOICES), ...sysVoices.map((v) => baseOf(tagOf(v)))])].filter((l) => l !== 'en' && /^[a-z]{2,3}$/.test(l))
     .sort((a, b) => languageName(a).localeCompare(languageName(b)));
   const nodes = [
     menuItem({ lang: '' }, 'As written', '', 'Read the text as it is on the page.'),
@@ -1941,6 +2000,7 @@ function setLang(lang) {
   saveSettings();
   buildVoiceMenu();
   markLang();
+  neural.load(); // starts the download, if this language is spoken by a voice not fetched yet
   const s = speaker.session;
   if (s?.mode === 'read') speaker.restart(); else if (s) speaker.stop(); // a reply already given stays in its language
   renderPlayer();
@@ -2092,7 +2152,7 @@ els.playBtn.addEventListener('click', () => speaker.toggle());
 els.stopBtn.addEventListener('click', () => speaker.stop());
 els.prevBtn.addEventListener('click', () => speaker.skip(-1));
 els.nextBtn.addEventListener('click', () => speaker.skip(1));
-els.retryBtn.addEventListener('click', () => voice.load());
+els.retryBtn.addEventListener('click', () => engineFor(speaker.session).load());
 els.keepBtn.addEventListener('click', () => {
   settings.keepReading = !settings.keepReading;
   els.keepBtn.setAttribute('aria-pressed', settings.keepReading);
@@ -2109,7 +2169,9 @@ els.speedSel.addEventListener('change', () => {
 els.voiceMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  if (item.dataset.uri) settings.sysVoices[settings.lang] = item.dataset.uri; else settings.voice = item.dataset.voice;
+  if (item.dataset.neural) delete settings.plain[settings.lang];
+  else if (item.dataset.uri) { settings.sysVoices[settings.lang] = item.dataset.uri; if (PIPER_VOICES[settings.lang]) settings.plain[settings.lang] = true; }
+  else settings.voice = item.dataset.voice;
   saveSettings();
   markVoice();
   els.voiceMenu.hidePopover();
@@ -2201,9 +2263,10 @@ ai.onChange = () => { renderChip(); renderPlayer(); };
 renderPlayer();
 renderChip();
 voice.load();
+neural.load();
 const aiReady = ai.init();
 
 const linked = new URLSearchParams(location.search).get('file');
 if (linked) openPdf(new URL(linked, location.href).href, decodeURIComponent(linked.split('/').pop()).replace(/\.pdf$/i, ''));
 
-window.reader = { speaker, view, settings, voice, ai, narration };
+window.reader = { speaker, view, settings, voice, neural, ai, narration };
