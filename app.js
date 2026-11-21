@@ -659,6 +659,7 @@ async function ensureBlocks(p) {
 function inUse(p) {
   const s = speaker.session;
   if (chat.block && partsOf(chat.block).some((b) => b.page === p)) return true;
+  if (speaker.recent && partsOf(speaker.recent).some((b) => b.page === p)) return true;
   return !!s && (speaker.active?.page === p || s.lastBlock.page === p
     || s.segs.some((x) => x.block.page === p || x.chunk.join?.some((j) => j.block.page === p)));
 }
@@ -1578,7 +1579,7 @@ const speaker = {
     }
     if (cur >= 0) wordMark.follow(s.sched[cur], t);
     const drained = s.next >= s.segs.length && !s.busy && !s.streaming && !s.extending && (!settings.keepReading || s.exhausted);
-    if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(); return; }
+    if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(s.mode === 'read' && !settings.keepReading); return; } // with nothing coming next, the paragraph stays selected
     this.pump();
   },
 
@@ -1682,9 +1683,12 @@ const speaker = {
     this.session = null;
   },
 
-  stop() {
+  /** End the session. With `keep`, the paragraph it ended on stays selected, so a sentence of it can be heard again. */
+  stop(keep = false) {
+    const last = keep ? this.active : null;
     this.halt();
     setActive(null, null);
+    select(last);
     renderPlayer();
     narration.relayout();
   },
@@ -1692,12 +1696,20 @@ const speaker = {
 
 // ── Highlighting ────────────────────────────────────────────────────────────
 
+/** Keep a paragraph marked once it has been read to its end (`speaker.recent`), or let go of the one that was. */
+function select(block) {
+  if (speaker.recent) for (const b of partsOf(speaker.recent)) b.el.classList.remove('selected');
+  speaker.recent = block || null;
+  if (block) for (const b of partsOf(block)) b.el.classList.add('selected');
+  else sentencePick.hide();
+}
+
 function setActive(block, chunk, auto = false, mode = 'read') {
   const prev = speaker.active;
   if (prev !== block) {
     if (prev) for (const b of partsOf(prev)) b.el.classList.remove('active', 'pending', 'explain');
     speaker.active = block;
-    if (block) speaker.recent = mode === 'read' ? block : null;
+    if (block) select(null);
     if (block && auto) reveal(block);
     if (prev && block && prev.page !== block.page) narration.relayout();
   }
@@ -1882,7 +1894,7 @@ const sentencePick = {
 
   /** Follow the pointer: `block` is what it is over, if anything. */
   follow(block, e) {
-    // In the paragraph being read or, once reading has stopped, the one read last.
+    // In the paragraph being read or, once it has been read to its end, the one still selected.
     const s = speaker.session;
     if (!block || (s ? s.mode !== 'read' : !speaker.recent) || !sameParagraph(s ? speaker.active : speaker.recent, block)) return this.hide();
     const box = block.page.hl.getBoundingClientRect();
@@ -2349,7 +2361,7 @@ addEventListener('keydown', (e) => {
     if (t.tagName === 'BUTTON' && t.matches(':focus-visible')) return; // let keyboard users press the focused button
     e.preventDefault();
     speaker.toggle();
-  } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else chat.close(); }
+  } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else if (speaker.recent) select(null); else chat.close(); }
   else if (e.key === 'ArrowRight') speaker.skip(1);
   else if (e.key === 'ArrowLeft') speaker.skip(-1);
 });
