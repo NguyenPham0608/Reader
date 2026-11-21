@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   bar: $('bar'), docTitle: $('docTitle'), pageInd: $('pageInd'), welcome: $('welcome'), pages: $('pages'),
   player: $('player'), playBtn: $('playBtn'), retryBtn: $('retryBtn'),
-  prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), keepBtn: $('keepBtn'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'), langBtn: $('langBtn'), langMenu: $('langMenu'),
+  prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), scopeBtn: $('scopeBtn'), scopeMenu: $('scopeMenu'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'), langBtn: $('langBtn'), langMenu: $('langMenu'),
   capBtn: $('capBtn'), caption: $('caption'), captionLang: $('captionLang'), captionText: $('captionText'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
@@ -27,7 +27,7 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true, colors: {} };
+const settings = { voice: 'Miles', speed: 1, scope: 'paragraph', zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true, colors: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
@@ -36,6 +36,17 @@ if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) se
 if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
 if (!settings.plain || typeof settings.plain !== 'object') settings.plain = {};
 if (!settings.own || typeof settings.own !== 'object') settings.own = {};
+// How much is read at a time. It used to be a switch, "keep reading", between a paragraph and the whole document.
+const SCOPES = [
+  { id: 'sentence', name: 'Sentence', short: 'Sent.', unit: 'sentence', about: 'Reads one sentence and stops.' },
+  { id: 'paragraph', name: 'Paragraph', short: 'Para.', unit: 'paragraph', about: 'Reads one paragraph and stops.' },
+  { id: 'section', name: 'Section', short: 'Sect.', unit: 'section', about: 'Reads on until the next heading.' },
+  { id: 'document', name: 'Whole document', short: 'Doc.', unit: 'paragraph', about: 'Reads on to the end.' },
+];
+if (!SCOPES.some((x) => x.id === settings.scope)) settings.scope = settings.keepReading ? 'document' : 'paragraph';
+delete settings.keepReading;
+/** Whether reading carries on past the end of a paragraph. */
+const readsOn = () => settings.scope === 'section' || settings.scope === 'document';
 if (!settings.colors || typeof settings.colors !== 'object') settings.colors = {};
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
 
@@ -676,6 +687,36 @@ async function adjacentBlock(block, dir) {
     for (; i >= 0 && i < blocks.length; i += dir) if (chunkBlock(blocks[i]).length) return blocks[i];
     p = view.pages[p.n - 1 + dir];
     i = dir > 0 ? 0 : -2;
+  }
+  return null;
+}
+
+/**
+ * Whether a block is a heading. Claude says so where it has laid the page out; otherwise it is
+ * a guess: a short line that doesn't end like a sentence, and is larger than the page's body
+ * text, numbered like a section, or in capitals.
+ */
+function isHeading(b) {
+  if (b.kind) return b.kind === 'heading';
+  const text = b.text.trim();
+  if (text.length > 140 || text.length < 3 || /[.,;:]$/.test(text)) return false;
+  const p = b.page;
+  if (p.bodySizeFor !== p.blocks) {
+    // The size most of the page's text is set in.
+    const sizes = new Map();
+    for (const x of p.blocks) sizes.set(half(x.size), (sizes.get(half(x.size)) || 0) + x.text.length);
+    p.bodySize = [...sizes].reduce((a, c) => (c[1] > a[1] ? c : a), [b.size, 0])[0];
+    p.bodySizeFor = p.blocks;
+  }
+  return b.size > p.bodySize * 1.12 || /^(?:\d+(?:\.\d+)*\.?|[IVXLC]+\.)\s+\p{Lu}/u.test(text) || (text.length > 5 && !/\p{Ll}/u.test(text) && /\p{Lu}/u.test(text));
+}
+
+/** The nearest heading in a direction, looking no further than a few hundred paragraphs. */
+async function nextHeading(block, dir) {
+  let b = block;
+  for (let i = 0; i < 400; i++) {
+    b = await nextReadable(b, dir);
+    if (!b || isHeading(b)) return b;
   }
   return null;
 }
@@ -1340,6 +1381,7 @@ const speaker = {
       s.segs = paragraphSegs(block);
       // Asked to begin at one sentence (`from` is its piece of the text): drop the ones before it.
       if (from) s.segs = s.segs.slice(Math.max(0, s.segs.findIndex((seg) => holds(seg, from))));
+      if (settings.scope === 'sentence') s.segs.length = Math.min(1, s.segs.length);
       for (const b of partsOf(block).reverse()) narration.request(b.page, true);
       if (s.lang) for (const b of partsOf(block)) translation.page(b.page, s.lang);
     }
@@ -1385,11 +1427,60 @@ const speaker = {
     renderPlayer();
   },
 
+  /**
+   * Move on (or back) by whatever is being read at a time: a sentence, a paragraph, or to the next
+   * heading. Works from the paragraph being read or the one left selected when reading stopped.
+   */
   async skip(dir) {
-    const from = this.active;
+    const here = () => this.active ?? this.recent;
+    const from = here();
     if (!from) return;
-    const b = await nextReadable(dir > 0 ? tailOf(from) : headOf(from), dir);
-    if (b && this.active === from) { this.start(b, 'read'); reveal(b); } // from a reply, this goes back to reading
+    const scope = this.session?.mode === 'explain' ? 'paragraph' : settings.scope; // from a reply, this goes back to reading
+    const firstOf = (seg) => seg.chunk.join?.[0].chunk ?? seg.chunk;
+    const outward = () => nextReadable(dir > 0 ? tailOf(from) : headOf(from), dir);
+    let to = null, sentence = null;
+    if (scope === 'sentence') {
+      const segs = paragraphSegs(headOf(from));
+      const at = this.at && sameParagraph(this.at.block, from) ? segs.findIndex((seg) => holds(seg, firstOf(this.at))) : -1;
+      const next = segs[at + dir];
+      if (at >= 0 && next) { to = headOf(from); sentence = firstOf(next); }
+      else {
+        to = await outward();
+        if (to && dir < 0) sentence = firstOf(paragraphSegs(headOf(to)).pop()); // back into a paragraph at its last sentence
+      }
+    } else if (scope === 'section') {
+      to = await nextHeading(dir > 0 ? tailOf(from) : headOf(from), dir);
+    } else {
+      to = await outward();
+    }
+    if (here() !== from) return;
+    if (!to) { toast(`No ${dir > 0 ? 'more' : 'earlier'} ${SCOPES.find((x) => x.id === scope).unit}s.`, 2200); return; }
+    this.start(to, 'read', null, sentence);
+    reveal(to);
+  },
+
+  /** The amount read at a time changed: let the session run on, or cut it back to what is now wanted. */
+  rescope() {
+    const s = this.session;
+    if (!s || s.mode !== 'read') return;
+    const last = s.segs[s.segs.length - 1];
+    if (settings.scope !== 'sentence' && last && sameParagraph(last.block, s.lastBlock)) {
+      // Reading one sentence left the rest of its paragraph out: put it back.
+      const all = paragraphSegs(headOf(last.block));
+      const at = all.findIndex((seg) => holds(seg, last.chunk.join?.[0].chunk ?? last.chunk));
+      if (at >= 0) s.segs.push(...all.slice(at + 1));
+    }
+    if (readsOn()) { s.exhausted = false; this.pump(); return; }
+    this.trimToActive();
+    if (settings.scope !== 'sentence') return;
+    // Just the sentence being spoken (or, before any is, the first).
+    const now = Math.max(0, s.cur >= 0 ? s.segs.indexOf(s.sched[s.cur].seg) : 0);
+    const later = (x) => s.segs.indexOf(x) > now;
+    this.silence(s.sched.filter((e) => later(e.seg)));
+    s.sched = s.sched.filter((e) => !later(e.seg));
+    s.segs.length = Math.min(s.segs.length, now + 1);
+    s.next = Math.min(s.next, s.segs.length);
+    s.nextTime = s.sched.length ? s.sched[s.sched.length - 1].end : 0;
   },
 
   /** Collect Claude's reply to a chat turn as it streams in, handing each finished sentence to the voice. */
@@ -1438,7 +1529,7 @@ const speaker = {
     if (!s || s.busy || (!s.sys && engineFor(s).state !== 'ready')) return;
     const ahead = s.sched.length ? s.nextTime - this.ctx.currentTime : 0;
     if (s.next >= s.segs.length) {
-      if (s.streaming || s.extending || s.exhausted || !settings.keepReading) return;
+      if (s.streaming || s.extending || s.exhausted || !readsOn()) return;
       if (ahead > BUFFER_AHEAD) return;
       this.extend(s);
       return;
@@ -1505,7 +1596,7 @@ const speaker = {
     const b = await nextReadable(s.lastBlock, 1).catch(() => null);
     if (this.session !== s) return;
     s.extending = false;
-    if (!b) { s.exhausted = true; return; }
+    if (!b || (settings.scope === 'section' && isHeading(b))) { s.exhausted = true; return; } // the next heading ends a section
     s.lastBlock = tailOf(b);
     const segs = paragraphSegs(b);
     segs[0].gap = 0.35; // a breath between paragraphs
@@ -1576,11 +1667,12 @@ const speaker = {
       s.cur = cur;
       if (cur >= 0) setActive(s.sched[cur].seg.block, s.sched[cur].seg.chunk, true, s.mode);
       if (cur >= 0) sentenceMark.show(s.sched[cur].seg);
+      if (cur >= 0 && s.mode === 'read') this.at = s.sched[cur].seg; // where the arrow keys move on from
       renderPlayer();
     }
     if (cur >= 0) wordMark.follow(s.sched[cur], t);
-    const drained = s.next >= s.segs.length && !s.busy && !s.streaming && !s.extending && (!settings.keepReading || s.exhausted);
-    if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(s.mode === 'read' && !settings.keepReading); return; } // with nothing coming next, the paragraph stays selected
+    const drained = s.next >= s.segs.length && !s.busy && !s.streaming && !s.extending && (!readsOn() || s.exhausted);
+    if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(s.mode === 'read' && settings.scope !== 'document'); return; } // with nothing coming next, the paragraph stays selected
     this.pump();
   },
 
@@ -1605,7 +1697,7 @@ const speaker = {
     this.pump();
   },
 
-  /** "Keep reading" switched off: finish the current paragraph, drop anything queued after it. */
+  /** No longer reading on: finish the current paragraph, drop anything queued after it. */
   trimToActive() {
     const s = this.session;
     if (!s || !this.active) return;
@@ -1958,8 +2050,10 @@ const sentencePick = {
   /** Follow the pointer: `block` is what it is over, if anything. */
   follow(block, e) {
     // In the paragraph being read or, once it has been read to its end, the one still selected.
+    // Reading a sentence at a time, any paragraph will do: the sentence is what gets picked.
     const s = speaker.session;
-    if (!block || (s ? s.mode !== 'read' : !speaker.recent) || !sameParagraph(s ? speaker.active : speaker.recent, block)) return this.hide();
+    const anywhere = settings.scope === 'sentence' && (!s || s.mode === 'read');
+    if (!block || (!anywhere && ((s ? s.mode !== 'read' : !speaker.recent) || !sameParagraph(s ? speaker.active : speaker.recent, block)))) return this.hide();
     const box = block.page.hl.getBoundingClientRect();
     const x = (e.clientX - box.left) / box.width * block.page.w, y = (e.clientY - box.top) / box.height * block.page.h;
     // The sentence whose lines come nearest the pointer: between two lines, the gap belongs to the closer.
@@ -2037,7 +2131,13 @@ function renderPlayer() {
   els.playBtn.setAttribute('aria-label', s && !s.paused ? 'Pause' : 'Play');
   els.retryBtn.hidden = engine.state !== 'error' || sys;
   els.stopBtn.hidden = !s;
-  els.prevBtn.disabled = els.nextBtn.disabled = !s;
+  els.prevBtn.disabled = els.nextBtn.disabled = !s && !speaker.recent;
+  const scope = SCOPES.find((x) => x.id === settings.scope);
+  els.scopeBtn.textContent = scope.short;
+  els.prevBtn.title = `Previous ${scope.unit} (←)`;
+  els.nextBtn.title = `Next ${scope.unit} (→)`;
+  els.prevBtn.setAttribute('aria-label', `Previous ${scope.unit}`);
+  els.nextBtn.setAttribute('aria-label', `Next ${scope.unit}`);
   els.voiceBtn.textContent = neuralFor() ? neuralFor().name : usesSysVoice() ? (sysVoice()?.name.split(/[ (]/)[0] || 'Voice') : settings.voice.split(' ').slice(0, 2).join(' ');
   els.langBtn.setAttribute('aria-pressed', !!settings.lang);
   els.langBtn.title = settings.lang ? `Reading in ${languageName(settings.lang)}, translated by Claude` : 'Read aloud in another language';
@@ -2149,6 +2249,21 @@ function buildLangMenu() {
   if (!langs.length) nodes.push(Object.assign(menuHead(synth ? 'This browser has no voices for other languages' : 'This browser can’t speak other languages'), { style: 'text-transform: none; letter-spacing: 0' }));
   els.langMenu.replaceChildren(...nodes);
   markLang();
+}
+
+function buildScopeMenu() {
+  els.scopeMenu.replaceChildren(menuHead('Read at a time'), ...SCOPES.map((x) => menuItem({ scope: x.id }, x.name, '', `${x.about} The arrow keys move by ${x.unit}.`)));
+  for (const item of els.scopeMenu.querySelectorAll('.voice-item')) item.setAttribute('aria-checked', item.dataset.scope === settings.scope);
+}
+
+function setScope(scope) {
+  if (scope === settings.scope) return;
+  settings.scope = scope;
+  saveSettings();
+  buildScopeMenu();
+  speaker.rescope();
+  renderPlayer();
+  toast(scope === 'document' ? 'Reading on to the end of the document.' : `Reading a ${scope} at a time.`, 2200);
 }
 
 function markLang() {
@@ -2361,7 +2476,7 @@ els.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.s
 
 for (const sp of SPEEDS) els.speedSel.add(new Option(`${sp}×`, sp));
 els.speedSel.value = settings.speed;
-els.keepBtn.setAttribute('aria-pressed', settings.keepReading);
+buildScopeMenu();
 document.documentElement.style.setProperty('--zoom', settings.zoom);
 refreshSysVoices();
 synth?.addEventListener?.('voiceschanged', refreshSysVoices); // they arrive late in most browsers
@@ -2398,12 +2513,11 @@ els.capBtn.addEventListener('click', () => {
   renderPlayer();
   toast(settings.captions ? 'Sentence box: on — shows each sentence in the language it is read in.' : 'Sentence box: off.', 2200);
 });
-els.keepBtn.addEventListener('click', () => {
-  settings.keepReading = !settings.keepReading;
-  els.keepBtn.setAttribute('aria-pressed', settings.keepReading);
-  saveSettings();
-  if (settings.keepReading) speaker.pump(); else speaker.trimToActive();
-  toast(settings.keepReading ? 'Keep reading: on — continues to the next paragraph.' : 'Keep reading: off — stops after each paragraph.', 2200);
+els.scopeMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('.voice-item');
+  if (!item) return;
+  els.scopeMenu.hidePopover();
+  setScope(item.dataset.scope);
 });
 els.speedSel.addEventListener('change', () => {
   settings.speed = Number(els.speedSel.value);
@@ -2480,7 +2594,7 @@ addEventListener('keydown', (e) => {
     if (t.tagName === 'BUTTON' && t.matches(':focus-visible')) return; // let keyboard users press the focused button
     e.preventDefault();
     speaker.toggle();
-  } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else if (speaker.recent) select(null); else chat.close(); }
+  } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else if (speaker.recent) { select(null); renderPlayer(); } else chat.close(); }
   else if (e.key === 'ArrowRight') speaker.skip(1);
   else if (e.key === 'ArrowLeft') speaker.skip(-1);
 });

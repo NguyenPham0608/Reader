@@ -363,7 +363,6 @@
   "361": "phonon_tts_bg.wasm.d.ts",
   "362": "phonon_tts_bg.wasm.d.ts",
   "363": "Tagged",
-  "364": "Transform",
   "365": "Traversal",
   "366": "Option10",
   "367": "WebClient",
@@ -371,11 +370,12 @@
   "369": "read",
   "370": "mount",
   "371": "Whitespace",
+  "373": "RunScripts",
+  "375": "WebClient",
+  "377": "WsdlAddress",
+  "378": "Xdc",
   "379": "PrintScaling",
   "381": "PsOperator",
-  "386": "StructElement",
-  "387": "Type",
-  "389": "TypeFace",
-  "391": "Xsl",
-  "392": "Zpl"
+  "382": "XRefEntryException",
+  "391": "Xsl"
 }
