@@ -1,4 +1,4 @@
-// The worker behind piper.js: turns text into phonemes with espeak-ng (as Piper's own tools do),
+// The worker behind neural.js: turns text into phonemes with espeak-ng (as Piper's own tools do),
 // then phonemes into sound with the voice's model.
 
 import * as ort from './vendor/piper/ort.wasm.bundle.min.mjs';

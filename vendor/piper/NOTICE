@@ -1,4 +1,4 @@
-What runs the reader's neural voices for other languages (see piper.js).
+What runs the reader’s neural voices for other languages (see neural.js).
 
 ort.wasm.bundle.min.mjs
   ONNX Runtime Web 1.31.1, from the npm package onnxruntime-web. MIT License,
@@ -11,4 +11,4 @@ piper_phonemize.mjs
   when a voice is first used. https://github.com/rhasspy/piper-phonemize
 
 The voice models are fetched from https://huggingface.co/rhasspy/piper-voices; each has its own
-licence, named beside it in piper.js.
+licence, named beside it in neural.js.

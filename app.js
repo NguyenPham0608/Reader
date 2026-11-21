@@ -1,6 +1,6 @@
 import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
 import { PhononTTS } from './vendor/phonon/index.js';
-import { PIPER_VOICES, PiperVoice } from './piper.js';
+import { NEURAL_VOICES, engineKey, loadNeural } from './neural.js';
 import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
 
@@ -27,7 +27,7 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, captions: true };
+const settings = { voice: 'Miles', speed: 1, keepReading: false, zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
@@ -35,6 +35,7 @@ settings.zoom = Math.min(3, Math.max(0.5, Number(settings.zoom) || 1));
 if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) settings.lang = '';
 if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
 if (!settings.plain || typeof settings.plain !== 'object') settings.plain = {};
+if (!settings.own || typeof settings.own !== 'object') settings.own = {};
 const saveSettings = () => { try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch {} };
 
 // ── Reading in another language ─────────────────────────────────────────────
@@ -62,8 +63,14 @@ function sysVoice(lang = settings.lang) {
 }
 /** Silence the system voice. Cancelling one that is paused leaves the next waiting, hence the resume. */
 const hush = () => { synth?.cancel(); synth?.resume(); };
-/** The reader's neural voice for the language being read in, where it has one and a system voice wasn't preferred (`settings.plain`). */
-const neuralFor = (lang = settings.lang) => (PIPER_VOICES[lang] && !settings.plain[lang] ? PIPER_VOICES[lang] : null);
+/**
+ * The reader's neural voice for the language being read in, where it has any and a system voice
+ * wasn't preferred (`settings.plain`): the one chosen (`settings.own`), or else the first.
+ */
+function neuralFor(lang = settings.lang) {
+  const all = NEURAL_VOICES[lang];
+  return all && !settings.plain[lang] ? all.find((v) => v.id === settings.own[lang]) ?? all[0] : null;
+}
 /** Whether speech comes from a system voice rather than one of the reader's own. */
 const usesSysVoice = () => !!settings.lang && settings.lang !== 'en' && !neuralFor();
 /** The language being translated into, as specific as the voice is ('pt-BR'), or '' when reading as written. */
@@ -324,7 +331,7 @@ function cleanForSpeech(s) {
 }
 
 const MAX_CHUNK = 280;
-const ABBREV = /(?:\b(?:et al|e\.g|i\.e|vs|cf|Figs?|Eqs?|Secs?|Refs?|No|Dr|Mrs?|Ms|Prof|St|Jr|Sr|approx|ca|pp?|Vol|Ch)|\b\p{Lu})\.\s*$/u;
+const ABBREV = /(?:\b(?:et al|e\.g|i\.e|vs|cf|Figs?|Eqs?|Secs?|Refs?|Dr|Mrs?|Ms|Prof|St|Jr|Sr|approx|ca|pp?|Vol|Ch)|\b\p{Lu})\.\s*$/u;
 const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'sentence' }) : null;
 
 function splitLong(t, s, e, out) {
@@ -347,27 +354,51 @@ function splitLong(t, s, e, out) {
   splitLong(t, best, e, out);
 }
 
-/** Split a block into sentence-sized pieces the voice speaks one after another. */
+/** How many brackets a piece of text opens and leaves open. */
+function unclosed(text) {
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === '(' || ch === '[') depth++;
+    else if ((ch === ')' || ch === ']') && depth > 0) depth--;
+  }
+  return depth;
+}
+
+/** Whether the break between two pieces the segmenter cut apart is not the end of a sentence. `ahead` is the text from the break on. */
+function falseStop(before, after, ahead) {
+  return ABBREV.test(before)                                    // "see Fig. | 2", "Smith et al. | 2020"
+    || (/\bNo\.\s*$/.test(before) && /^\s*\d/.test(after))        // "No. | 5", but "No. | Maybe so."
+    || (unclosed(before) > 0 && /[)\]]/.test(ahead))               // a full stop inside brackets: "(p. | 5)"
+    || !/\p{L}/u.test(before) || !/[\p{L}\p{N}]/u.test(after)   // nothing to say on one side: "1. | Introduction", "… | )."
+    || /^[\s"'“‘(\[]*\p{Ll}+(?![\p{Lu}\p{N}\p{Ll}])/u.test(after); // carries on in lower case: "approx. | five" (but not "mRNA")
+}
+
+/** Split a block into its sentences, the pieces the voice speaks one after another; a very long one is cut at a clause. */
 function chunkBlock(block) {
   if (block.chunks) return block.chunks;
   const t = block.text;
   const parts = [];
   if (segmenter) {
-    for (const s of segmenter.segment(t)) parts.push([s.index, s.index + s.segment.length]);
+    for (const s of segmenter.segment(t)) {
+      // It takes a lower-case letter to mean the sentence carries on, which "mRNA" and "pH" get past.
+      let from = 0;
+      for (const m of s.segment.matchAll(/[.!?]["'”’)\]]*\s+(?=\p{Ll}{1,2}\p{Lu})/gu)) {
+        parts.push([s.index + from, s.index + m.index + m[0].length]);
+        from = m.index + m[0].length;
+      }
+      parts.push([s.index + from, s.index + s.segment.length]);
+    }
   } else {
     const re = /[^.!?]+(?:[.!?]+["'”’)\]]*\s*|$)/g;
     let m;
     while ((m = re.exec(t)) && m[0]) parts.push([m.index, m.index + m[0].length]);
   }
+  // The segmenter stops at every full stop that could end a sentence. Undo the stops that don't.
   const merged = [];
   for (const p of parts) {
     const last = merged[merged.length - 1];
-    if (last && (last[1] - last[0] < 40 || ABBREV.test(t.slice(last[0], last[1])))) last[1] = p[1];
+    if (last && falseStop(t.slice(last[0], last[1]), t.slice(p[0], p[1]), t.slice(p[0], p[0] + MAX_CHUNK))) last[1] = p[1];
     else merged.push([p[0], p[1]]);
-  }
-  if (merged.length > 1) {
-    const tail = merged[merged.length - 1];
-    if (tail[1] - tail[0] < 25) { merged.pop(); merged[merged.length - 1][1] = tail[1]; }
   }
   const ranges = [];
   for (const [s, e] of merged) splitLong(t, s, e, ranges);
@@ -742,6 +773,8 @@ async function openPdf(source, name) {
 }
 
 function closeDoc() {
+  speaker.recent = null;
+  sentencePick.hide();
   nearObserver.disconnect();
   for (const p of view.pages) p.renderTask?.cancel();
   view.pages = [];
@@ -1170,7 +1203,8 @@ const voice = {
 /** The neural voice for another language (see piper.js): loaded when first needed, one language at a time. */
 const neural = {
   tts: null,
-  spec: null,
+  spec: null, // the voice last asked for; `key` is the engine it runs on, which other voices may share
+  key: '',
   state: 'idle', // idle | loading | ready | error
   pct: 0,
   everReady: false,
@@ -1178,12 +1212,14 @@ const neural = {
 
   load(spec = neuralFor()) {
     if (!spec) return null;
-    if (this.job && this.spec === spec && this.state !== 'error') return this.job;
-    Object.assign(this, { spec, state: 'loading', pct: 0, everReady: false });
+    const key = engineKey(spec);
+    this.spec = spec;
+    if (this.job && this.key === key && this.state !== 'error') return this.job;
+    Object.assign(this, { key, state: 'loading', pct: 0, everReady: false });
     renderPlayer();
     const job = this.job = (async () => {
       try {
-        const tts = await PiperVoice.load(spec, {
+        const tts = await loadNeural(spec, {
           onProgress: ({ loaded, total }) => { if (this.job === job && total) { this.pct = Math.min(99, Math.floor(100 * loaded / total)); renderPlayer(); } },
         });
         if (this.job !== job) { tts.dispose(); return; }
@@ -1203,11 +1239,11 @@ const neural = {
     return job;
   },
 
-  /** Speak one piece of text. The model has no reliable pace of its own, so speed is all time-stretching. → { pcm, rate } */
-  async synth(text, signal) {
+  /** Speak one piece of text in one of the loaded engine's voices, at the chosen speed. → { pcm, rate } */
+  async synth(text, spec, signal) {
     const tts = this.tts;
-    const pcm = await tts.synth(text, signal);
-    return { pcm: timeStretch(pcm, settings.speed, tts.sampleRate), rate: tts.sampleRate };
+    const pcm = await tts.synth(text, spec, { signal, speed: settings.speed });
+    return { pcm: timeStretch(pcm, settings.speed / tts.pace(settings.speed), tts.sampleRate), rate: tts.sampleRate };
   },
 };
 /** Whichever of the reader's own engines speaks now, or would for a session. */
@@ -1274,7 +1310,7 @@ const speaker = {
    * Begin a session on a block, either reading it ('read') or speaking Claude's reply to a turn
    * of the chat about it ('explain').
    */
-  start(block, mode, turn = null) {
+  start(block, mode, turn = null, from = null) {
     block = headOf(block); // a paragraph is read from its start, whichever part of it was picked
     this.halt();
     this.ensureCtx();
@@ -1300,6 +1336,8 @@ const speaker = {
       this.streamReply(s, block);
     } else {
       s.segs = paragraphSegs(block);
+      // Asked to begin at one sentence (`from` is its piece of the text): drop the ones before it.
+      if (from) s.segs = s.segs.slice(Math.max(0, s.segs.findIndex((seg) => holds(seg, from))));
       for (const b of partsOf(block).reverse()) narration.request(b.page, true);
       if (s.lang) for (const b of partsOf(block)) translation.page(b.page, s.lang);
     }
@@ -1320,9 +1358,14 @@ const speaker = {
   },
 
 
-  /** A click on the paragraph being spoken pauses or resumes it; on any other one, reads it. */
+  /**
+   * A click on a sentence of the paragraph being read reads from that sentence again; elsewhere in
+   * that paragraph it pauses or resumes; on any other paragraph, it reads that one.
+   */
   toggleBlock(block) {
-    if (this.session && sameParagraph(this.active, block)) this.toggle();
+    const picked = sentencePick.seg;
+    if (picked && holdsBlock(picked, block)) this.start(block, 'read', null, picked.chunk.join?.[0].chunk ?? picked.chunk);
+    else if (this.session && sameParagraph(this.active, block)) this.toggle();
     else this.speak(block);
   },
 
@@ -1438,7 +1481,7 @@ const speaker = {
     if (s.sys) { this.say(s, idx); return; }
     const signal = s.synthAbort.signal;
     const text = spoken(seg.chunk), engine = engineFor(s);
-    (s.neural ? neural.synth(text, signal) : voice.synth(text, settings.voice, signal)).then(
+    (s.neural ? neural.synth(text, s.neural, signal) : voice.synth(text, settings.voice, signal)).then(
       (audio) => {
         if (this.session !== s || s.id !== id) return;
         s.busy = false;
@@ -1600,7 +1643,7 @@ const speaker = {
     this.stopPreview();
     const mine = this.previewToken = {};
     try {
-      const { pcm, rate } = await (spec ? neural.synth(languageName(spec.tag, spec.tag))
+      const { pcm, rate } = await (spec ? neural.synth(languageName(spec.tag, spec.tag), spec)
         : voice.synth(`Hi, I'm ${name}. This is how I'll read to you.`, name));
       if (this.previewToken !== mine || this.session) return;
       const buf = this.ctx.createBuffer(1, pcm.length, rate);
@@ -1654,6 +1697,7 @@ function setActive(block, chunk, auto = false, mode = 'read') {
   if (prev !== block) {
     if (prev) for (const b of partsOf(prev)) b.el.classList.remove('active', 'pending', 'explain');
     speaker.active = block;
+    if (block) speaker.recent = mode === 'read' ? block : null;
     if (block && auto) reveal(block);
     if (prev && block && prev.page !== block.page) narration.relayout();
   }
@@ -1664,6 +1708,7 @@ function setActive(block, chunk, auto = false, mode = 'read') {
     b.el.classList.toggle('pending', !chunk);
   }
   if (!block || !chunk || chunk.start == null) { wordMark.hide(); sentenceMark.hide(); }
+  if (prev !== block && block) sentencePick.hide();
 }
 
 // ── The word being spoken ───────────────────────────────────────────────────
@@ -1823,6 +1868,56 @@ const wordMark = {
  * In another language the words heard aren't the words on the page, so the mark covers the
  * whole sentence being spoken instead: one box for each line it runs over.
  */
+const holdsBlock = (seg, block) => (seg.chunk.join?.map((j) => j.block) ?? [seg.block]).some((b) => sameParagraph(b, block));
+/** Whether a piece being voiced is, or includes, one sentence piece of a block. */
+const holds = (seg, chunk) => seg.chunk === chunk || !!seg.chunk.join?.some((j) => j.chunk === chunk);
+
+/**
+ * The sentence under the pointer, outlined, while it is over the paragraph being read: a preview
+ * of what a click would read again. A sentence cut by a column or page break is outlined whole.
+ */
+const sentencePick = {
+  els: [],
+  seg: null,
+
+  /** Follow the pointer: `block` is what it is over, if anything. */
+  follow(block, e) {
+    // In the paragraph being read or, once reading has stopped, the one read last.
+    const s = speaker.session;
+    if (!block || (s ? s.mode !== 'read' : !speaker.recent) || !sameParagraph(s ? speaker.active : speaker.recent, block)) return this.hide();
+    const box = block.page.hl.getBoundingClientRect();
+    const x = (e.clientX - box.left) / box.width * block.page.w, y = (e.clientY - box.top) / box.height * block.page.h;
+    // The sentence whose lines come nearest the pointer: between two lines, the gap belongs to the closer.
+    let best = null, bestD = Infinity;
+    for (const chunk of chunkBlock(block)) {
+      for (const r of chunkRects(block, chunk)) {
+        const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.top - y, 0, y - r.bottom));
+        if (d < bestD) { bestD = d; best = chunk; }
+      }
+    }
+    if (!best || bestD > block.size) return this.hide();
+    if (this.seg && holds(this.seg, best)) return;
+    this.hide();
+    this.seg = paragraphSegs(headOf(block)).find((seg) => holds(seg, best)) ?? null;
+    if (!this.seg) return;
+    for (const { block: b, chunk } of this.seg.chunk.join ?? [this.seg]) {
+      const padX = b.size * 0.14, padY = b.size * 0.08;
+      for (const r of chunkRects(b, chunk)) {
+        const el = Object.assign(document.createElement('div'), { className: 'word pick' });
+        place(el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, b.page);
+        b.page.hl.append(el);
+        this.els.push(el);
+      }
+    }
+  },
+
+  hide() {
+    for (const el of this.els) el.remove();
+    this.els = [];
+    this.seg = null;
+  },
+};
+
 const sentenceMark = {
   els: [],
   seg: null,
@@ -1954,8 +2049,8 @@ const menuHead = (text) => Object.assign(document.createElement('div'), { classN
 /** The voices to choose from: the reader's own or, for another language, the system's voices for it. */
 function buildVoiceMenu() {
   const nodes = [];
-  const own = PIPER_VOICES[settings.lang];
-  if (own) nodes.push(menuHead('The reader’s own'), menuItem({ neural: '1' }, own.name, 'On this device',`${own.about} The first use downloads about ${own.megabytes} MB.`));
+  const own = NEURAL_VOICES[settings.lang];
+  if (own) nodes.push(menuHead('The reader’s own'), ...own.map((v) => menuItem({ neural: v.id }, v.name, v.tags, `${v.about} The first use downloads about ${v.megabytes} MB.`)));
   if (own || usesSysVoice()) {
     const all = voicesFor(settings.lang);
     for (const tag of [...new Set(all.map(tagOf))].sort()) {
@@ -1976,15 +2071,15 @@ function buildVoiceMenu() {
 }
 
 function markVoice() {
-  const uri = sysVoice()?.voiceURI, own = !!neuralFor();
+  const uri = sysVoice()?.voiceURI, own = neuralFor();
   for (const item of els.voiceMenu.querySelectorAll('.voice-item')) {
-    item.setAttribute('aria-checked', item.dataset.neural ? own : item.dataset.uri ? !own && item.dataset.uri === uri : item.dataset.voice === settings.voice);
+    item.setAttribute('aria-checked', item.dataset.neural ? item.dataset.neural === own?.id : item.dataset.uri ? !own && item.dataset.uri === uri : item.dataset.voice === settings.voice);
   }
 }
 
 /** The languages to read in: as written, English, and each language the reader or the system has a voice for. */
 function buildLangMenu() {
-  const langs = [...new Set([...Object.keys(PIPER_VOICES), ...sysVoices.map((v) => baseOf(tagOf(v)))])].filter((l) => l !== 'en' && /^[a-z]{2,3}$/.test(l))
+  const langs = [...new Set([...Object.keys(NEURAL_VOICES), ...sysVoices.map((v) => baseOf(tagOf(v)))])].filter((l) => l !== 'en' && /^[a-z]{2,3}$/.test(l))
     .sort((a, b) => languageName(a).localeCompare(languageName(b)));
   const nodes = [
     menuItem({ lang: '' }, 'As written', '', 'Read the text as it is on the page.'),
@@ -2153,7 +2248,8 @@ const setHover = (block) => {
   hovered.forEach((b) => b.el.classList.add('hover'));
 };
 els.pages.addEventListener('mouseover', (e) => setHover(blockOf.get(e.target)));
-els.pages.addEventListener('mouseleave', () => setHover(null));
+els.pages.addEventListener('mouseleave', () => { setHover(null); sentencePick.hide(); });
+els.pages.addEventListener('mousemove', (e) => sentencePick.follow(blockOf.get(e.target), e));
 els.pages.addEventListener('dblclick', (e) => {
   const b = blockOf.get(e.target);
   if (!b) return;
@@ -2187,8 +2283,8 @@ els.speedSel.addEventListener('change', () => {
 els.voiceMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  if (item.dataset.neural) delete settings.plain[settings.lang];
-  else if (item.dataset.uri) { settings.sysVoices[settings.lang] = item.dataset.uri; if (PIPER_VOICES[settings.lang]) settings.plain[settings.lang] = true; }
+  if (item.dataset.neural) { delete settings.plain[settings.lang]; settings.own[settings.lang] = item.dataset.neural; }
+  else if (item.dataset.uri) { settings.sysVoices[settings.lang] = item.dataset.uri; if (NEURAL_VOICES[settings.lang]) settings.plain[settings.lang] = true; }
   else settings.voice = item.dataset.voice;
   saveSettings();
   markVoice();
@@ -2287,4 +2383,4 @@ const aiReady = ai.init();
 const linked = new URLSearchParams(location.search).get('file');
 if (linked) openPdf(new URL(linked, location.href).href, decodeURIComponent(linked.split('/').pop()).replace(/\.pdf$/i, ''));
 
-window.reader = { speaker, view, settings, voice, neural, ai, narration };
+window.reader = { speaker, view, settings, voice, neural, ai, narration, sentencePick };
