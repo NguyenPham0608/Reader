@@ -120,8 +120,9 @@
   }
   .word.on { opacity: 1; }
   .word.jump { transition: none; }
-  /* The sentence being read, boxed line by line; and, the same, the one under the pointer that a click would read again. */
-  .word.sentence, .word.pick { opacity: 1; transition: none; background: rgba(70, 120, 255, .13); box-shadow: inset 0 0 0 1.5px rgba(40, 90, 220, .85); }
+  /* The sentence being read, in one outline that follows its lines; and, the same, the one under the pointer that a click would read again. */
+  .sbox { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .sbox path { fill: rgba(255, 177, 128, 0.255); stroke: rgba(217, 44, 44, 0.65); stroke-width: 1.5px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
   .blk {
     position: absolute; padding: 0; border: 0; border-radius: 9px; background: transparent;
     mix-blend-mode: multiply; transition: background .22s ease; -webkit-tap-highlight-color: transparent;

@@ -1880,6 +1880,68 @@ const wordMark = {
  * In another language the words heard aren't the words on the page, so the mark covers the
  * whole sentence being spoken instead: one box for each line it runs over.
  */
+/**
+ * The outline of some lines of text as one shape: each line's box, joined to the next where they
+ * meet so that no edge is drawn twice, with the corners rounded. → an SVG path
+ */
+function outlinePath(rects, radius) {
+  // Down the right-hand side, then back up the left: the boundary between two lines is one shared height.
+  const right = [], left = [];
+  rects.forEach((r, i) => {
+    const top = i ? (rects[i - 1].bottom + r.top) / 2 : r.top;
+    const bottom = i < rects.length - 1 ? (r.bottom + rects[i + 1].top) / 2 : r.bottom;
+    right.push([r.x1, top], [r.x1, bottom]);
+    left.unshift([r.x0, bottom], [r.x0, top]);
+  });
+  const pts = [...right, ...left]
+    .filter((p, i, all) => { const q = all[(i + all.length - 1) % all.length]; return Math.abs(p[0] - q[0]) > 0.01 || Math.abs(p[1] - q[1]) > 0.01; });
+  let d = '';
+  pts.forEach((p, i) => {
+    const a = pts[(i + pts.length - 1) % pts.length], b = pts[(i + 1) % pts.length];
+    const la = Math.hypot(p[0] - a[0], p[1] - a[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+    const r = Math.min(radius, la / 2, lb / 2);
+    const from = [p[0] + (a[0] - p[0]) * r / la, p[1] + (a[1] - p[1]) * r / la], to = [p[0] + (b[0] - p[0]) * r / lb, p[1] + (b[1] - p[1]) * r / lb];
+    d += `${i ? 'L' : 'M'}${from.map((v) => v.toFixed(2))} Q${p.map((v) => v.toFixed(2))} ${to.map((v) => v.toFixed(2))} `;
+  });
+  return d + 'Z';
+}
+
+/** Draw a box round a sentence being voiced, on each page it touches. `kind` is its class. → the elements, to remove later */
+function sentenceBoxes(seg, kind) {
+  const byPage = new Map();
+  for (const { block, chunk } of seg.chunk.join ?? [seg]) {
+    // The words only: the space after a sentence is left outside, so two neighbouring boxes don't overlap.
+    const text = block.text.slice(chunk.start, chunk.end);
+    const range = { start: chunk.start + text.length - text.trimStart().length, end: chunk.start + text.trimEnd().length };
+    const padX = block.size * 0.09, padY = block.size * 0.06;
+    let group = null; // lines that follow on from one another; a new column starts a new shape
+    for (const r of chunkRects(block, range)) {
+      const box = { x0: r.x0 - padX, x1: r.x1 + padX, top: r.top - padY, bottom: r.bottom + padY };
+      const prev = group?.[group.length - 1];
+      if (prev && box.top >= prev.top && box.top - prev.bottom < block.size && box.x0 < prev.x1 && box.x1 > prev.x0) group.push(box);
+      else {
+        group = [box];
+        if (!byPage.has(block.page)) byPage.set(block.page, []);
+        byPage.get(block.page).push({ group, radius: block.size * 0.28 });
+      }
+    }
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  return [...byPage].map(([page, shapes]) => {
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', `sbox ${kind}`);
+    svg.setAttribute('viewBox', `0 0 ${page.w} ${page.h}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    for (const { group, radius } of shapes) {
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', outlinePath(group, radius));
+      svg.append(path);
+    }
+    page.hl.append(svg);
+    return svg;
+  });
+}
+
 const holdsBlock = (seg, block) => (seg.chunk.join?.map((j) => j.block) ?? [seg.block]).some((b) => sameParagraph(b, block));
 /** Whether a piece being voiced is, or includes, one sentence piece of a block. */
 const holds = (seg, chunk) => seg.chunk === chunk || !!seg.chunk.join?.some((j) => j.chunk === chunk);
@@ -1912,15 +1974,7 @@ const sentencePick = {
     this.hide();
     this.seg = paragraphSegs(headOf(block)).find((seg) => holds(seg, best)) ?? null;
     if (!this.seg) return;
-    for (const { block: b, chunk } of this.seg.chunk.join ?? [this.seg]) {
-      const padX = b.size * 0.14, padY = b.size * 0.08;
-      for (const r of chunkRects(b, chunk)) {
-        const el = Object.assign(document.createElement('div'), { className: 'word pick' });
-        place(el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, b.page);
-        b.page.hl.append(el);
-        this.els.push(el);
-      }
-    }
+    this.els = sentenceBoxes(this.seg, 'pick');
   },
 
   hide() {
@@ -1939,15 +1993,7 @@ const sentenceMark = {
     this.hide();
     if (seg.chunk.start == null) return;
     this.seg = seg;
-    for (const { block, chunk } of seg.chunk.join ?? [seg]) {
-      const padX = block.size * 0.14, padY = block.size * 0.08;
-      for (const r of chunkRects(block, chunk)) {
-        const el = Object.assign(document.createElement('div'), { className: 'word sentence on' });
-        place(el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, block.page);
-        block.page.hl.append(el);
-        this.els.push(el);
-      }
-    }
+    this.els = sentenceBoxes(seg, 'sentence');
   },
 
   hide() {
