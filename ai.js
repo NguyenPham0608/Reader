@@ -184,12 +184,48 @@ export const ai = {
     return this.withDoc((doc) => postJson('/api/narrate', { doc: doc.id, page, pieces }));
   },
 
+  /** Have the wording a translation keeps to worked out ahead of the first request for one. */
+  glossary({ lang, language, english }) {
+    return this.withDoc((doc) => postJson('/api/glossary', { doc: doc.id, lang, language, english }, { timeout: 180000 }));
+  },
+
   /**
    * Ask for pieces of a page as they should be spoken in another language: `lang` is its tag
-   * ('fr', 'pt-BR'), `language` its name in English. → { lines: [{id, say}] }, one per piece
+   * ('fr', 'pt-BR'), `language` its name in English, `english` how much English the voice says
+   * the English way ('words', 'acronyms' or 'none'). `onLine({ id, say })` receives each piece as
+   * soon as it is translated; a piece Claude couldn't translate never comes. `urgent`: someone
+   * is waiting to hear it. Resolves once every line is in.
    */
-  translate(page, pieces, lang, language) {
-    return this.withDoc((doc) => postJson('/api/translate', { doc: doc.id, page, pieces, lang, language }, { timeout: 240000 }));
+  translate({ page, pieces, lang, language, english, urgent = false, onLine }) {
+    return this.withDoc(async (doc) => {
+      const { res, done } = await post('/api/translate', { doc: doc.id, page, pieces, lang, language, english, urgent }, { timeout: 240000 });
+      try {
+        if (!res.headers.get('Content-Type')?.includes('ndjson')) { // a server from before answers all at once
+          for (const line of (await res.json()).lines || []) onLine(line);
+          return;
+        }
+        let buf = '', finished = false;
+        const take = (line) => {
+          if (!line.trim()) return;
+          const msg = JSON.parse(line);
+          if (msg.error) throw new AiError(msg.error, MESSAGES[msg.error] || msg.message);
+          if (msg.done) finished = true; else onLine(msg);
+        };
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { value, done: end } = await reader.read();
+          if (end) break;
+          const lines = (buf + decoder.decode(value, { stream: true })).split('\n');
+          buf = lines.pop();
+          lines.forEach(take);
+        }
+        take(buf + decoder.decode());
+        if (!finished) throw new AiError('offline', 'The translation was cut off.');
+      } finally {
+        done();
+      }
+    });
   },
 
   /**

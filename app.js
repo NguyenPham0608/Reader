@@ -3,6 +3,7 @@ import { PhononTTS } from './vendor/phonon/index.js';
 import { NEURAL_VOICES, engineKey, loadNeural } from './neural.js';
 import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
+import { speakable } from './speakable.js';
 
 const VENDOR = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.min.mjs';
@@ -87,6 +88,16 @@ function neuralFor(lang = settings.lang) {
 const usesSysVoice = () => !!settings.lang && settings.lang !== 'en' && !neuralFor();
 /** The language being translated into, as specific as the voice is ('pt-BR'), or '' when reading as written. */
 const targetLang = () => neuralFor()?.tag ?? (usesSysVoice() ? (sysVoice() ? tagOf(sysVoice()) : settings.lang) : settings.lang);
+/**
+ * How much English the voice reading a translation into `lang` says the English way, so Claude
+ * knows what it may leave in English: 'words' and acronyms (VieNeu, and the reader's English
+ * voices), 'acronyms' only (Piper), or 'none' (Supertonic and the system's voices).
+ */
+function englishFor(lang) {
+  if (baseOf(lang) === 'en') return 'words';
+  const engine = usesSysVoice() ? null : neuralFor()?.engine;
+  return engine === 'vieneu' ? 'words' : engine === 'piper' ? 'acronyms' : 'none';
+}
 
 // ── Text analysis: PDF text items → lines → paragraphs → sentences ──────────
 // Lines come from the PDF. Which lines form a paragraph is Claude's call (see `narration`),
@@ -328,6 +339,8 @@ const tailOf = (b) => { while (b.next) b = b.next; return b; };
 /** Every block of the paragraph a block belongs to, first to last. */
 const partsOf = (b) => { const out = []; for (b = headOf(b); b; b = b.next) out.push(b); return out; };
 const sameParagraph = (a, b) => !!a && !!b && headOf(a) === headOf(b);
+/** Whether a block's paragraph goes on in its next block in the middle of a sentence, cut by a column or page break. */
+const carriesOn = (b) => !!b?.next && !SENTENCE_OVER.test(b.text.trimEnd());
 /** Put text back together across a break, mending a word the break hyphenated. */
 const glue = (texts) => texts.reduce((a, b) => (HYPHEN_END.test(a) && /^\p{Ll}/u.test(b) ? a.slice(0, -1) + b : `${a} ${b}`));
 const paragraphText = (b) => glue(partsOf(b).map((x) => x.text.trim()));
@@ -922,6 +935,7 @@ async function startClaude() {
   }
   try {
     await ai.open(payload, view.name);
+    translation.prepare();
     return true;
   } catch (e) {
     if (token === view.token) toast(`${e.message} Reading the text as written for now.`, 6000);
@@ -1066,27 +1080,79 @@ const narration = {
 // ── Claude: translating for reading aloud ───────────────────────────────────
 
 /**
- * Translations live on the sentences themselves (`chunk.tr[lang]`). A page is translated in one
- * request, ahead of the voice; the paragraph about to be spoken is also asked for on its own,
- * since that answer comes back in a couple of seconds and a page's takes much longer.
+ * Translations live on the sentences themselves (`chunk.tr[lang]`); a sentence keeps the first one
+ * it gets. A page is translated in one request, ahead of the voice; the paragraph about to be
+ * spoken is also asked for on its own, since that request is small and need not wait for the
+ * glossary that page requests use. Both stream, so speech starts with the first sentence in.
  */
 const translation = {
-  pieces: (blocks) => blocks.flatMap((b) => chunkBlock(b).map((c, i) => ({ id: `${b.index}.${i}`, text: markedText(b, c.start, c.end) }))),
-
-  /** Put Claude's lines on their sentences. `fill`: a sentence it left out counts as having nothing to say. */
-  apply(blocks, lines, lang, fill) {
-    for (const { id, say } of lines) {
-      const [bi, ci] = id.split('.').map(Number);
-      const chunk = blocks.find((b) => b.index === bi)?.chunks?.[ci];
-      if (chunk) (chunk.tr ??= {})[lang] = say;
-    }
-    for (const b of blocks) {
-      if (fill) for (const c of chunkBlock(b)) (c.tr ??= {})[lang] ??= '';
-      if (chunkBlock(b).every((c) => c.tr?.[lang] != null)) (b.translated ??= {})[lang] = true;
-    }
+  /**
+   * Have the open document's glossary for the language being read in worked out now, while
+   * nothing waits on it, so that even the first paragraph read keeps to the same wording.
+   */
+  prepare() {
+    const lang = targetLang();
+    if (!lang || !usingClaude()) return;
+    ai.glossary({ lang, language: languageName(lang), english: englishFor(lang) }).catch((e) => console.warn('Claude could not settle the wording', e));
   },
 
-  /** Translate a whole page. Resolves when it has been tried; paragraphs it missed are left for `block`. */
+  /**
+   * What to send for some blocks: their sentences not yet translated, as `pieces` ([{ id, text }]),
+   * and `where`, the sentence of each id. A sentence cut in two by a column or page break is sent
+   * whole, both halves in the request that has its first half, so the two fit together; a half
+   * from another page has an id that names it ('13:0.0'). With `owned`, a block's first sentence
+   * is left to the request for the block before it, when that one isn't here and still needs its
+   * half. (A request for one block always sends all of it, so whatever is waited for gets asked.)
+   */
+  plan(blocks, lang, page, owned = false) {
+    const pieces = [], where = new Map(), sent = new Set(), here = new Set(blocks);
+    const has = (c) => c?.tr?.[lang] != null;
+    const last = (b) => chunkBlock(b).at(-1);
+    const add = (b, i) => {
+      const c = chunkBlock(b)[i];
+      // A sentence already asked for by someone waiting to hear it comes from that request.
+      if (!c || has(c) || sent.has(c) || (!owned && c.asked?.[lang]?.urgent)) return;
+      const id = `${b.page.n === page ? '' : `${b.page.n}:`}${b.index}.${i}`;
+      where.set(id, c);
+      sent.add(c);
+      pieces.push({ id, text: markedText(b, c.start, c.end) });
+    };
+    for (const b of blocks) {
+      const theirs = owned && carriesOn(b.prev) && !here.has(b.prev) && last(b.prev) && !has(last(b.prev));
+      for (let i = theirs ? 1 : 0; i < chunkBlock(b).length; i++) add(b, i);
+      if (carriesOn(b) && !here.has(b.next) && sent.has(last(b))) add(b.next, 0);
+    }
+    return { pieces, where };
+  },
+
+  /** Put one of Claude's lines on its sentence, unless that has a translation already, and let speech waiting for it go on. */
+  apply(where, { id, say }, lang) {
+    const c = where.get(id);
+    if (!c || typeof say !== 'string' || c.tr?.[lang] != null) return;
+    (c.tr ??= {})[lang] = say;
+    speaker.translated(lang);
+  },
+
+  /** Ask Claude for what some blocks still need, putting each line in place as it comes. → the sentences it didn't bring */
+  async fetch(page, blocks, lang, urgent) {
+    const token = view.token;
+    const { pieces, where } = this.plan(blocks, lang, page, !urgent);
+    if (!pieces.length) return [];
+    const mark = { urgent }; // on each sentence while this request is out for it (an urgent request's mark stays)
+    for (const c of where.values()) if (!c.asked?.[lang]?.urgent) (c.asked ??= {})[lang] = mark;
+    try {
+      await ai.translate({
+        page, pieces, lang, language: languageName(lang), english: englishFor(lang), urgent,
+        onLine: (line) => { if (token === view.token) this.apply(where, line, lang); },
+      });
+    } finally {
+      for (const c of where.values()) if (c.asked[lang] === mark) delete c.asked[lang];
+      speaker.translated(lang); // speech waiting on a sentence this didn't bring can ask for it now
+    }
+    return [...where.values()].filter((c) => c.tr?.[lang] == null);
+  },
+
+  /** Translate a whole page. Resolves when it has been tried; sentences it missed are left for `block`. */
   page(p, lang) {
     p.tr ??= {};
     return p.tr[lang] ??= (async () => {
@@ -1096,11 +1162,7 @@ const translation = {
         await narration.request(p); // so the paragraphs are Claude's before they are translated
         const blocks = await ensureBlocks(p);
         if (token !== view.token || p.tr !== mine) return;
-        const todo = blocks.filter((b) => !b.skip && !b.translated?.[lang]);
-        const pieces = this.pieces(todo);
-        if (!pieces.length) return;
-        const { lines } = await ai.translate(p.n, pieces, lang, languageName(lang));
-        if (token === view.token) this.apply(todo, lines, lang, false);
+        await this.fetch(p.n, blocks.filter((b) => !b.skip), lang, false);
       } catch (e) {
         console.warn('Claude could not translate page', p.n, e);
         if (p.tr === mine) p.tr[lang] = null; // allow another try later
@@ -1108,25 +1170,26 @@ const translation = {
     })();
   },
 
-  /** Translate one paragraph for certain: resolves once every sentence of it has its translation, or rejects. */
+  /** Translate one block for certain: resolves once every sentence of it has its translation, or rejects. */
   block(block, lang) {
-    const done = () => !!block.translated?.[lang];
+    const done = () => chunkBlock(block).every((c) => c.tr?.[lang] != null);
     if (done()) return Promise.resolve();
     block.trWait ??= {};
     return block.trWait[lang] ??= (async () => {
-      const token = view.token;
-      const whole = this.page(block.page, lang);
+      const token = view.token, whole = this.page(block.page, lang);
       const alone = (async () => {
         if (!(await startClaude())) throw ai.doc?.error || new AiError(ai.available ? 'api' : ai.reason);
-        const { lines } = await ai.translate(block.page.n, this.pieces([block]), lang, languageName(lang));
-        if (token === view.token && !done()) this.apply([block], lines, lang, true);
+        const missed = await this.fetch(block.page.n, [block], lang, true);
+        // Claude was asked twice for these and left them out: say nothing for them rather than stall.
+        if (token === view.token) for (const c of missed) { console.warn('Claude left a sentence untranslated:', c.raw); (c.tr ??= {})[lang] ??= ''; }
       })();
-      // Whichever brings this paragraph first; a failure counts only if neither does.
+      // Whichever brings this block first; a failure counts only if neither does.
       const error = await Promise.race([
         whole.then(() => (done() ? null : alone.then(() => null, (e) => e))),
         alone.then(() => null, (e) => whole.then(() => (done() ? null : e))),
       ]);
-      if (error) { block.trWait[lang] = null; throw error; }
+      block.trWait[lang] = null;
+      if (error) throw error;
     })();
   },
 };
@@ -1299,6 +1362,8 @@ const spoken = (chunk) => (chunk.explain ? chunk.say
   : settings.lang ? (chunk.join ?? [{ chunk }]).map((j) => j.chunk.tr?.[targetLang()] || '').filter(Boolean).join(' ')
   : chunk.join ? glue(chunk.join.map((j) => spoken(j.chunk)))
   : (settings.ai && chunk.aiSay) || chunk.say);
+/** What a session's voice is given for a sentence: in another language, with the last touches figures and links need. */
+const voiced = (s, chunk) => (s.lang ? speakable(spoken(chunk), s.lang) : spoken(chunk));
 
 /**
  * What to voice for a paragraph, from one of its blocks to its last. Where it crosses to the
@@ -1311,7 +1376,7 @@ function paragraphSegs(first) {
     const mine = segsFor(b);
     const last = segs[segs.length - 1];
     // The halves are one sentence only if the part before the break didn't finish its own.
-    if (last && mine.length && !SENTENCE_OVER.test(b.prev.text.trimEnd())) {
+    if (last && mine.length && carriesOn(b.prev)) {
       const join = [...(last.chunk.join ?? [{ block: last.block, chunk: last.chunk }]), { block: b, chunk: mine[0].chunk }];
       if (join.reduce((n, j) => n + j.chunk.end - j.chunk.start, 0) <= MAX_CHUNK * 1.2) {
         last.chunk = {
@@ -1327,6 +1392,7 @@ function paragraphSegs(first) {
   return segs;
 }
 const BUFFER_AHEAD = 25;   // seconds of audio to keep ready beyond the playhead
+const TRANSLATION_MARGIN = 8; // seconds of audio left before a sentence its page's request hasn't brought yet is asked for on its own
 
 /** Where the first sentence in a growing piece of text ends, or 0 if it hasn't yet. */
 function sentenceEnd(buf) {
@@ -1369,7 +1435,7 @@ const speaker = {
       lang: targetLang(), sys: usesSysVoice(), neural: neuralFor(),
       // A reply is a one-off: it never carries on to the next paragraph.
       busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
-      lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null,
+      lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null, trWait: null,
       // A double-click starts as a single click; holding audio back briefly lets it change its mind unheard.
       notBefore: this.ctx.currentTime + 0.25,
       synthAbort: new AbortController(), aiAbort: new AbortController(),
@@ -1523,6 +1589,12 @@ const speaker = {
     this.pump();
   },
 
+  /** A sentence's translation came in: speech waiting for one can go on, without waiting for the rest. */
+  translated(lang) {
+    const s = this.session;
+    if (s?.lang === lang && s.waitPage) this.pump();
+  },
+
   /** Voice the next sentence, unless enough audio is already queued or something it needs isn't ready. */
   pump() {
     const s = this.session;
@@ -1537,20 +1609,26 @@ const speaker = {
     if (ahead > BUFFER_AHEAD) return;
     const idx = s.next, id = s.id, seg = s.segs[idx];
     if (s.lang && !seg.chunk.explain) {
-      // Nothing is said until Claude's translation of it is in.
-      const b = (seg.chunk.join ?? [seg]).find((j) => j.chunk.tr?.[s.lang] == null)?.block;
-      if (b) {
-        if (s.waitPage !== b) {
-          s.waitPage = b;
-          const mine = () => this.session === s && s.id === id && s.waitPage === b;
+      // Nothing is said until Claude's translation of it is in. `waitPage` shows that, and has
+      // each translation as it arrives call this again; `trWait` is the block asked for.
+      const missing = (seg.chunk.join ?? [seg]).find((j) => j.chunk.tr?.[s.lang] == null);
+      if (missing) {
+        const b = missing.block, asked = missing.chunk.asked?.[s.lang];
+        if (s.waitPage !== b) { s.waitPage = b; renderPlayer(); }
+        // A sentence already on its way is waited for rather than paid for twice: always when it
+        // comes with the paragraph being read, and from its page's request while enough audio is
+        // queued to cover asking for it on its own if that runs late.
+        if (s.trWait !== b && !(asked && (asked.urgent || ahead > TRANSLATION_MARGIN))) {
+          s.trWait = b;
+          const mine = () => this.session === s && s.id === id && s.trWait === b;
           translation.block(b, s.lang).then(
-            () => { if (mine()) { s.waitPage = null; renderPlayer(); this.pump(); } },
+            () => { if (mine()) { s.trWait = null; this.pump(); } },
             (e) => { if (mine()) { this.stop(); toast(`Couldn’t translate this passage. ${e.message || ''}`, 6000); } },
           );
-          renderPlayer();
         }
         return;
       }
+      if (s.waitPage) { s.waitPage = null; renderPlayer(); }
       if (!spoken(seg.chunk)) { s.next = idx + 1; this.pump(); return; } // a page number, a stray label
     }
     const block = (seg.chunk.join?.map((j) => j.block) ?? [seg.block]).find((b) => !narration.settled(b));
@@ -1573,7 +1651,7 @@ const speaker = {
     s.busy = true;
     if (s.sys) { this.say(s, idx); return; }
     const signal = s.synthAbort.signal;
-    const text = spoken(seg.chunk), engine = engineFor(s);
+    const text = voiced(s, seg.chunk), engine = engineFor(s);
     (s.neural ? neural.synth(text, s.neural, signal) : voice.synth(text, settings.voice, signal)).then(
       (audio) => {
         if (this.session !== s || s.id !== id) return;
@@ -1611,7 +1689,7 @@ const speaker = {
    */
   say(s, idx) {
     const seg = s.segs[idx], id = s.id, v = sysVoice();
-    const u = s.utterance = new SpeechSynthesisUtterance(spoken(seg.chunk)); // held, or its events can be lost
+    const u = s.utterance = new SpeechSynthesisUtterance(voiced(s, seg.chunk)); // held, or its events can be lost
     if (v) u.voice = v;
     u.lang = v ? v.lang : s.lang;
     u.rate = settings.speed;
@@ -2282,6 +2360,7 @@ function setLang(lang) {
   buildVoiceMenu();
   markLang();
   neural.load(); // starts the download, if this language is spoken by a voice not fetched yet
+  translation.prepare();
   const s = speaker.session;
   if (s?.mode === 'read') speaker.restart(); else if (s) speaker.stop(); // a reply already given stays in its language
   renderPlayer();
@@ -2533,6 +2612,7 @@ els.voiceMenu.addEventListener('click', (e) => {
   else settings.voice = item.dataset.voice;
   saveSettings();
   markVoice();
+  translation.prepare(); // a voice that says more or less English the English way keeps to its own glossary
   els.voiceMenu.hidePopover();
   renderPlayer();
   if (speaker.session) speaker.restart(); else speaker.preview(settings.voice);

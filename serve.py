@@ -71,7 +71,7 @@ MODEL = "claude-sonnet-5-5"
 # If Claude's safety classifiers decline a request, the API retries it on a fallback model.
 BETAS = ["server-side-fallback-2026-07-01"]
 PROMPT_VERSION = "4"  # bump to stop using answers cached under older prompts
-TRANSLATE_VERSION = "2"  # the same, for translations and replies in another language only
+TRANSLATE_VERSION = "3"  # the same, for translations and replies in another language only
 # Sonnet 5.5 prices in dollars per million tokens (cache writes at the 1-hour rate), for the daily cap.
 PRICE = {"input": 2.0, "cache_write": 4.0, "cache_read": 0.10, "output": 10.0}
 WARM_FOR = 50 * 60  # seconds a document's prompt cache is assumed alive (it is written with a 1-hour lifetime)
@@ -142,20 +142,37 @@ Answer with one JSON object and nothing else, in this shape: {{"changes": [{{"id
 
 TRANSLATE = """Task: translate page {page} into {language} for reading aloud.
 
-Below is the text of page {page} as the app extracted it, already cut into the pieces it will speak one after another. Each piece has an id such as 12.1 (block 12, piece 1). Where the app could detect them, ^{{...}} marks a superscript and _{{...}} marks a subscript.
+Below is text from page {page} as the app extracted it, already cut into the pieces it will speak one after another. Each piece has an id such as 12.1 (block 12, piece 1). An id that begins with another page's number and a colon, such as 13:0.0, is a piece from that page which finishes a sentence begun on this one. Where the app could detect them, ^{{...}} marks a superscript and _{{...}} marks a subscript.
 
 The listener wants to hear this document in {language}. For every piece, write what the voice should say in {language}: a faithful, natural translation, the way a good translator would put it for someone listening, neither word for word nor a summary. In this task your spoken text is not English: write {language} only, in its usual script.
 - Each piece is translated under its own id, because the app marks on the page the piece being spoken. Never merge pieces, and never move content from one piece into another. A piece can begin or end in the middle of a sentence, where a column or a page breaks: translate just that fragment, worded so that it runs on from the piece before it and into the piece after it.
-- Mathematics, formulas and notation are said the way a {language} speaker would say them aloud to a colleague, following the rules you were given, carried over into {language}. Numbers, units and ordinary abbreviations (Fig., e.g., etc.) become the words a {language} speaker says. Acronyms and initialisms written in capitals (AI, DNA, GDP, WHO, mRNA) are different: keep them exactly as written, in their Latin capitals, neither translated nor expanded nor spelled out in {language} letters, because the voice says them the English way.
-- Repair damage from extraction (words glued together or broken apart, a formula whose parts came out scrambled) from the document before translating. Citation and footnote markers such as [12] are not spoken, so leave them out; where the sentence leans on the marker as if it were a word, say the {language} for "reference 12" there.
-- Names of people, places and products stay as they are, and so do the titles of cited works. A technical term takes its established {language} equivalent where there is one, and otherwise stays in the original.
+- Write every number as the words a {language} speaker says, never as digits: counts, years, dates, decimals, percentages, ranges, and numbers inside labels, names and formulas. Say the same number the same way each time.
+- Mathematics, formulas and notation are said the way a {language} speaker would say them aloud to a colleague, following the rules you were given, carried over into {language}. Units and ordinary abbreviations (Fig., e.g., etc.) become the words a {language} speaker says.
+- Identifiers that nobody reads aloud are left out: DOIs, web and email addresses, postal codes, ISBNs and ISSNs, arXiv and grant numbers. Where the sentence needs something in their place, say in {language} what it is ("the DOI", "the project's website"). Citation and footnote markers such as [12] are not spoken either; where the sentence leans on the marker as if it were a word, say the {language} for "reference 12" there.
+- Repair damage from extraction (words glued together or broken apart, a formula whose parts came out scrambled) from the document before translating.
+- Names of people, places and products stay as they are, and so do the titles of cited works. {english}
 - A piece that is already in {language} is returned as it should be spoken, changed only as the points above require.
 - A piece with nothing to say aloud (a page number, a stray label, a lone symbol from inside a figure) gets an empty string.
-
-Page {page} pieces:
+{glossary}{context}
+Pieces:
 {pieces}
 
-Answer with one JSON object and nothing else, in this shape: {{"lines": [{{"id": "5.0", "say": "..."}}, {{"id": "5.1", "say": "..."}}]}}, with one entry for every piece, in the order given."""
+Answer with one line for each piece above, in the order given, and nothing else. Each line is a JSON object of its own, such as {{"id": "5.1", "say": "..."}}, and every piece gets one, even when its "say" is empty."""
+
+# What the voice reading a translation can say the English way, as the page reports it: VieNeu
+# says English words and acronyms in English ("words"), Piper only acronyms, and the others
+# pronounce everything in the language they speak.
+ENGLISH = {
+    "words": "The voice says English words, and acronyms written in Latin capitals (AI, DNA, GDP, WHO, mRNA), the English way. Keep such acronyms exactly as written, neither translated nor expanded nor spelled out in {language} letters. A technical term takes its established {language} equivalent where there is one, and otherwise stays in English.",
+    "acronyms": "The voice says acronyms written in Latin capitals (AI, DNA, GDP, WHO, mRNA) the English way, so keep them exactly as written, neither translated nor expanded nor spelled out in {language} letters. Every other word it pronounces as {language}, so an English word left in would come out wrong: a technical term takes its established {language} equivalent, or else the spelling {language} speakers use for it as a loanword, and stays in English only where neither exists.",
+    "none": "The voice pronounces everything as {language}, English words included. Keep acronyms written in Latin capitals (AI, DNA, GDP) as they are, but give every other technical term its established {language} equivalent, or else the spelling {language} speakers use for it as a loanword, and leave a word in English only where neither exists.",
+}
+
+GLOSSARY = """Task: before this document is translated into {language} for reading aloud, page by page, settle the wording the translation will keep to, so that every page says the same thing the same way.
+
+List the document's recurring technical terms, names of methods and models, and recurring phrases that a translator would otherwise word afresh each time, each with the {language} wording to use every time. {english} Then list each recurring symbol or variable whose spoken form is not obvious, with how a {language} speaker says it aloud. Leave out ordinary words, people's names, acronyms that stay as written, and anything every translator would render the same way. Give at most sixty entries, the most frequent first, and write each "say" the way it is spoken: in words, not digits or symbols.
+
+Answer with one JSON object and nothing else, in this shape: {{"terms": [{{"term": "as written in the document", "say": "in {language}"}}]}}."""
 
 IN_LANGUAGE = """
 
@@ -248,6 +265,37 @@ def parse_json_answer(text):
         raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.") from e
 
 
+def json_lines(on_obj):
+    """Read an answer written as one JSON object per line while it streams in. → (feed, end):
+    `feed` takes each piece of text as it arrives and `end` closes the answer; every complete
+    object goes to `on_obj`. Lines that aren't an object (a code fence, a remark) are passed over."""
+    buf = ""
+
+    def take(line):
+        line = line.strip().rstrip(",")
+        if not (line.startswith("{") and line.endswith("}")):
+            return
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            return
+        if isinstance(obj, dict):
+            on_obj(obj)
+
+    def feed(text):
+        nonlocal buf
+        *lines, buf = (buf + text).split("\n")
+        for line in lines:
+            take(line)
+
+    def end():
+        nonlocal buf
+        take(buf)
+        buf = ""
+
+    return feed, end
+
+
 class Allowance:
     """How much Claude use the open, hosted reader has paid for today.
 
@@ -292,6 +340,9 @@ class Claude:
         self._client = None
         self._lock = threading.Lock()
         self._doc_locks = {}
+        self._file_locks = {}
+        self._said = {}  # translation file → {piece key: what to say}, kept in memory once read
+        self._claims = {}  # translation file → {piece key: Event}, for pieces being translated right now
         self._warm_at = {}
 
     def status(self):
@@ -528,28 +579,174 @@ class Claude:
         write_json(path, result)
         return result
 
-    def translate(self, sha, page, pieces, lang, language):
-        """Every piece of a page (or of one paragraph of it) as it should be spoken in another language. → {"lines": [{id, say}]}"""
+    def _file_lock(self, path):
+        """One lock per file, for files that several requests read, change and write back."""
+        with self._lock:
+            return self._file_locks.setdefault(str(path), threading.Lock())
+
+    def _glossary_path(self, sha, lang, english):
+        return self.doc_dir(sha) / "glossary" / f"{lang}-{english}-v{PROMPT_VERSION}.{TRANSLATE_VERSION}.json"
+
+    def glossary(self, sha, lang, language, english, wait=True):
+        """The wording a document's translation into a language keeps to, worked out once.
+
+        → [{"term", "say"}], or None if another request is working it out and `wait` is false.
+        """
+        path = self._glossary_path(sha, lang, english)
+        lock = self._file_lock(path)
+        if not lock.acquire(blocking=wait):
+            return None
+        try:
+            known = read_json(path)
+            if known is not None:
+                return known.get("terms", [])
+            task = GLOSSARY.format(language=language, english=ENGLISH[english].format(language=language))
+            try:
+                data = parse_json_answer(self.run(sha, f"settle the wording for {language}", task))
+            except ApiError as e:
+                if e.code != "bad_output":
+                    raise
+                data = {}  # kept as an empty glossary, rather than asked for again with every page
+            clean = lambda v, n: " ".join(str(v).split())[:n]
+            terms = [{"term": clean(t["term"], 120), "say": clean(t["say"], 200)}
+                     for t in data.get("terms", []) if isinstance(t, dict) and t.get("term") and t.get("say")][:80]
+            write_json(path, {"terms": terms})
+            return terms
+        finally:
+            lock.release()
+
+    def _glossary_later(self, sha, lang, language, english):
+        """Start working out the glossary without waiting for it (nothing happens if that is under way)."""
+        def go():
+            try:
+                self.glossary(sha, lang, language, english, wait=False)
+            except ApiError as e:
+                print(f"[claude] could not settle the wording for {language}: {e.message}", flush=True)
+        threading.Thread(target=go, daemon=True).start()
+
+    def translate(self, sha, page, pieces, lang, language, english, urgent, on_line):
+        """Pieces of a page as they should be spoken in another language, each handed to
+        `on_line({"id", "say"})` as soon as it is known.
+
+        Translations are kept per piece, whichever request brought them (a page, or one paragraph
+        of it), so only pieces never translated before are asked of Claude; a page request also
+        waits for pieces another request is translating right now, rather than pay for them twice.
+        A piece Claude leaves out is asked for once more on its own; one still missing after that
+        goes unanswered. `english` is how much English the voice says the English way (see
+        ENGLISH). `urgent`: someone is waiting to hear this, so nothing is waited for.
+        """
         lang, language = language_of(lang, language)
-        pieces = [(str(p["id"]), str(p["text"])) for p in pieces]
-        key = hashlib.sha1(json.dumps([PROMPT_VERSION, TRANSLATE_VERSION, page, lang, pieces]).encode()).hexdigest()[:16]
-        path = self.doc_dir(sha) / "translated" / f"{page}-{lang}-{key}.json"
-        cached = read_json(path)
-        if cached:
-            return cached
-        task = TRANSLATE.format(page=page, language=language, pieces="\n".join(f"{i}: {t}" for i, t in pieces))
-        data = parse_json_answer(self.run(sha, f"translate page {page} into {language}", task))
-        known = dict(pieces)
-        result = {"lines": [
-            {"id": ln["id"], "say": " ".join(ln["say"].split())}
-            for ln in data.get("lines", [])
-            # Some languages run longer than others, but not many times longer.
-            if isinstance(ln, dict) and ln.get("id") in known and isinstance(ln.get("say"), str) and len(ln["say"]) <= 8 * len(known[ln["id"]]) + 200
-        ]}
-        if pieces and not result["lines"]:
+        english = english if english in ENGLISH else "words"  # a page from before this was asked for
+        pieces = [(str(p["id"]), " ".join(str(p["text"]).split())) for p in pieces[:400]]
+        # A piece is known by its page and text: its id changes whenever the page's paragraphs do.
+        # "13:0.0" is a piece of page 13 sent with page 12, the end of a sentence begun there.
+        page_of = lambda pid: int(pid.split(":", 1)[0]) if ":" in pid else page
+        keys = {pid: hashlib.sha1(json.dumps([page_of(pid), text]).encode()).hexdigest()[:16] for pid, text in pieces}
+        store = self.doc_dir(sha) / "translated" / f"{lang}-{english}-v{PROMPT_VERSION}.{TRANSLATE_VERSION}.json"
+        with self._lock:
+            if str(store) not in self._said:
+                self._said[str(store)] = (read_json(store) or {}).get("pieces", {})
+            known, claims = self._said[str(store)], self._claims.setdefault(str(store), {})
+        said = {}
+
+        def from_cache():
+            for pid, _ in pieces:
+                if pid not in said and keys[pid] in known:
+                    said[pid] = known[keys[pid]]
+                    on_line({"id": pid, "say": said[pid]})
+
+        from_cache()
+        if all(pid in said for pid, _ in pieces):
+            return
+        if urgent:
+            terms = (read_json(self._glossary_path(sha, lang, english)) or {}).get("terms")
+            if terms is None:
+                self._glossary_later(sha, lang, language, english)
+        else:
+            try:
+                terms = self.glossary(sha, lang, language, english)
+            except ApiError as e:  # the glossary only keeps the wording steady: translate without it
+                print(f"[claude] could not settle the wording for {language}: {e.message}", flush=True)
+                terms = None
+            # Pieces another request is translating right now: wait for those rather than pay twice.
+            with self._lock:
+                busy = [claims[keys[pid]] for pid, _ in pieces if pid not in said and keys[pid] in claims]
+            until = time.time() + 120
+            for event in busy:
+                event.wait(max(0.0, until - time.time()))
+            from_cache()  # including what other requests brought meanwhile
+        answered = False
+        for _ in range(2):
+            todo = [(pid, text) for pid, text in pieces if pid not in said]
+            if not todo:
+                break
+            mine = {}
+            with self._lock:
+                for pid, _ in todo:
+                    if keys[pid] not in claims:
+                        claims[keys[pid]] = mine[keys[pid]] = threading.Event()
+
+            def heard(line):  # kept the moment it arrives, so other requests can use it at once
+                key = keys[line["id"]]
+                known[key] = line["say"]
+                with self._lock:
+                    if key in mine:
+                        claims.pop(key, None)
+                        mine.pop(key).set()
+                on_line(line)
+
+            try:
+                got = self._ask_translation(sha, page, language, english, terms, pieces, said, todo, heard)
+            finally:
+                with self._lock:
+                    for key, event in mine.items():
+                        claims.pop(key, None)
+                        event.set()
+            if got:
+                answered = True
+                with self._file_lock(store):
+                    write_json(store, {"pieces": dict(known)})
+                said.update(got)
+        if not answered:
             raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.")
-        write_json(path, result)
-        return result
+
+    def _ask_translation(self, sha, page, language, english, terms, pieces, said, todo, on_line):
+        """One request to Claude for the pieces in `todo`, each passed to `on_line` as it comes. → {id: say}"""
+        source, order, wanted = dict(pieces), [pid for pid, _ in pieces], {pid for pid, _ in todo}
+        # Neighbours already translated come along, so a sentence split between pieces still fits together.
+        near = [pid for i, pid in enumerate(order) if pid in said and (
+            (i > 0 and order[i - 1] in wanted) or (i + 1 < len(order) and order[i + 1] in wanted))]
+        context = glossary = ""
+        if near:
+            context = ("\nThese neighbouring pieces have been translated already. They are here only so that the pieces "
+                       "below can run on from them and into them; don't answer for them:\n"
+                       + "\n".join(f"{pid}: {source[pid]}\n  said as: {said[pid]}" for pid in near[:12]) + "\n")
+        if terms:
+            glossary = ("\nUse this wording every time these come up, so that every page says them the same way:\n"
+                        + "\n".join(f"- {t['term']}: {t['say']}" for t in terms) + "\n")
+        task = TRANSLATE.format(page=page, language=language, english=ENGLISH[english].format(language=language),
+                                glossary=glossary, context=context, pieces="\n".join(f"{pid}: {text}" for pid, text in todo))
+        got = {}
+
+        def take(obj):
+            pid, say = str(obj.get("id")), obj.get("say")
+            # Some languages run longer than others, but not many times longer.
+            if pid in wanted and pid not in got and isinstance(say, str) and len(say) <= 8 * len(source[pid]) + 200:
+                got[pid] = " ".join(say.split())
+                on_line({"id": pid, "say": got[pid]})
+
+        feed, end = json_lines(take)
+        answer = self.run(sha, f"translate page {page} into {language}", task, feed)
+        end()
+        if not got:  # written the way this used to be asked for, as one object
+            try:
+                lines = parse_json_answer(answer).get("lines", [])
+            except ApiError:
+                lines = []
+            for obj in lines if isinstance(lines, list) else []:
+                if isinstance(obj, dict):
+                    take(obj)
+        return got
 
     def explain(self, sha, page, text, before, after, on_text, question="", history=(), lang="", language=""):
         """Explain a paragraph aloud or, given a question about it, answer that instead.
@@ -728,7 +925,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if url.path == "/api/narrate":
                 return self._json(claude.narrate(req["doc"], int(req["page"]), req["pieces"]))
             if url.path == "/api/translate":
-                return self._json(claude.translate(req["doc"], int(req["page"]), req["pieces"], req["lang"], req["language"]))
+                return self._translate(req)
+            if url.path == "/api/glossary":  # asked for ahead of the first translation, which then needn't wait
+                lang, language = language_of(req["lang"], req["language"])
+                english = req.get("english") if req.get("english") in ENGLISH else "words"
+                return self._json({"terms": len(claude.glossary(req["doc"], lang, language, english))})
             if url.path == "/api/explain":
                 return self._explain(req)
             self._json({"error": "not_found"}, 404)
@@ -738,6 +939,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json({"error": "bad_request", "message": str(e)}, 400)
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def _translate(self, req):
+        """Stream the translation one piece per line, then {"done": true}, so speech can start on the
+        first sentence. A failure before the first line is an ordinary error reply; after it, a line
+        {"error", "message"}."""
+        started = gone = False
+
+        def send(obj):
+            nonlocal started, gone
+            if gone:
+                return
+            try:
+                if not started:
+                    started = True
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                    self.end_headers()
+                self.wfile.write((json.dumps(obj, ensure_ascii=False) + "\n").encode())
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                gone = True  # the page went away: carry on, so what Claude writes is still kept
+
+        try:
+            claude.translate(req["doc"], int(req["page"]), req["pieces"], req["lang"], req["language"],
+                             str(req.get("english", "words")), bool(req.get("urgent")), send)
+        except (ApiError, KeyError, ValueError, TypeError) as e:
+            if not started:
+                raise
+            send({"error": getattr(e, "code", "bad_request"), "message": getattr(e, "message", str(e))})
+            return
+        send({"done": True})
 
     def _explain(self, req):
         """Stream the explanation as plain text, so speech can start on the first sentence."""
