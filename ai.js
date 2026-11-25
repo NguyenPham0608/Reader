@@ -103,6 +103,9 @@ export const ai = {
       phonemes: !!s.phonemes, checked: true,
     });
     this.onChange();
+    // The hosted server sleeps after 15 minutes with no requests, and takes a minute to wake: reading
+    // as written asks nothing of it, so keep it awake for when a translation is wanted.
+    if (s.available) setInterval(() => probe(base, 20000), 10 * 60e3);
   },
 
   /**
@@ -244,9 +247,11 @@ export const ai = {
    * the English way ('words', 'acronyms' or 'none'). `onLine({ id, say })` receives each piece as
    * soon as it is translated; a piece Claude couldn't translate never comes. `urgent`: someone
    * is waiting to hear it. Resolves once every line is in. Pieces translated before, in this
-   * browser, come from what it kept and aren't asked for.
+   * browser, come from what it kept and aren't asked for. `quick` (with `urgent`): Claude works
+   * from the pieces alone, without the document, so the request needn't wait for the document to
+   * reach the server and be read in: for the paragraphs that open it.
    */
-  async translate({ page, pieces, lang, language, english, urgent = false, onLine }) {
+  async translate({ page, pieces, lang, language, english, urgent = false, quick = false, onLine }) {
     const doc = this.doc;
     if (!doc) throw new AiError('api');
     const kept = await this.shelf(doc, `translated-${lang}-${english}`);
@@ -263,8 +268,8 @@ export const ai = {
       if (p && typeof line.say === 'string') kept?.set(keyOf(p), line.say);
       onLine(line);
     };
-    return this.withDoc(async (doc) => {
-      const { res, done } = await post('/api/translate', { doc: doc.id, page, pieces: [...asking.values()], lang, language, english, urgent }, { timeout: 240000 });
+    const ask = async (id) => {
+      const { res, done } = await post('/api/translate', { doc: id, page, pieces: [...asking.values()], lang, language, english, urgent, quick }, { timeout: 240000 });
       try {
         if (!res.headers.get('Content-Type')?.includes('ndjson')) { // a server from before answers all at once
           for (const line of (await res.json()).lines || []) heard(line);
@@ -291,7 +296,10 @@ export const ai = {
       } finally {
         done();
       }
-    }, doc);
+    };
+    // A quick request names the document by its fingerprint, which is the server's name for it too.
+    const key = quick && urgent ? await doc.key : null;
+    return key ? ask(key) : this.withDoc((d) => ask(d.id), doc);
   },
 
   /**

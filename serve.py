@@ -470,6 +470,12 @@ class Claude:
         return sha, read_json(self.doc_dir(sha) / "notes.json")
 
     def _request(self, meta, task, turns=()):
+        """A request about the document (`meta`), or, with no `meta`, about the task's text alone."""
+        document = [{
+            "type": "document",
+            "source": {"type": "file", "file_id": meta["file_id"]},
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        }] if meta else []
         return dict(
             model=MODEL,
             betas=BETAS,
@@ -479,14 +485,7 @@ class Claude:
             output_config={"effort": "low"},
             messages=[{
                 "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {"type": "file", "file_id": meta["file_id"]},
-                        "cache_control": {"type": "ephemeral", "ttl": "1h"},
-                    },
-                    {"type": "text", "text": task},
-                ],
+                "content": [*document, {"type": "text", "text": task}],
             }, *turns],  # `turns`: the rest of a conversation that began with this task
         )
 
@@ -528,10 +527,13 @@ class Claude:
             print(f"[claude] cached document: {u.cache_creation_input_tokens} tokens written, "
                   f"{u.cache_read_input_tokens} already cached ({time.time() - t:.1f}s)", flush=True)
 
-    def run(self, sha, label, task, on_text=None, turns=()):
-        meta = self.meta(sha)
+    def run(self, sha, label, task, on_text=None, turns=(), document=True):
+        """Ask Claude `task` about the document, streaming the answer to `on_text`. With `document`
+        false the document isn't sent, so nothing waits for it to be uploaded or cached."""
+        meta = self.meta(sha) if document else None
         allowance.check()
-        self._ensure_warm(sha, meta)
+        if meta:
+            self._ensure_warm(sha, meta)
         t = time.time()
 
         def go():
@@ -542,7 +544,8 @@ class Claude:
                 return stream.get_final_message()
 
         msg = self._call(go, sha)
-        self._warm_at[sha] = time.time()
+        if meta:
+            self._warm_at[sha] = time.time()
         u = msg.usage
         allowance.charge(u)
         print(f"[claude] {label}: {u.cache_read_input_tokens} cached + {u.input_tokens + u.cache_creation_input_tokens} new in, "
@@ -684,7 +687,7 @@ class Claude:
                 print(f"[claude] could not settle the wording for {language}: {e.message}", flush=True)
         threading.Thread(target=go, daemon=True).start()
 
-    def translate(self, sha, page, pieces, lang, language, english, urgent, on_line):
+    def translate(self, sha, page, pieces, lang, language, english, urgent, on_line, quick=False):
         """Pieces of a page as they should be spoken in another language, each handed to
         `on_line({"id", "say"})` as soon as it is known.
 
@@ -693,7 +696,9 @@ class Claude:
         waits for pieces another request is translating right now, rather than pay for them twice.
         A piece Claude leaves out is asked for once more on its own; one still missing after that
         goes unanswered. `english` is how much English the voice says the English way (see
-        ENGLISH). `urgent`: someone is waiting to hear this, so nothing is waited for.
+        ENGLISH). `urgent`: someone is waiting to hear this, so nothing is waited for. `quick` (with
+        `urgent`): the document isn't sent along, so nothing waits for it to be uploaded and cached
+        either; for the paragraphs that open a document, which are wanted before that is done.
         """
         lang, language = language_of(lang, language)
         english = english if english in ENGLISH else "words"  # a page from before this was asked for
@@ -720,7 +725,7 @@ class Claude:
             return
         if urgent:
             terms = (read_json(self._glossary_path(sha, lang, english)) or {}).get("terms")
-            if terms is None:
+            if terms is None and not quick:  # (a quick request may come before the document: the pages' requests start it)
                 self._glossary_later(sha, lang, language, english)
         else:
             try:
@@ -757,7 +762,7 @@ class Claude:
                 on_line(line)
 
             try:
-                got = self._ask_translation(sha, page, language, english, terms, pieces, said, ask, heard) if ask else {}
+                got = self._ask_translation(sha, page, language, english, terms, pieces, said, ask, heard, quick) if ask else {}
             finally:
                 with self._lock:
                     for key, event in mine.items():
@@ -773,7 +778,7 @@ class Claude:
         if not said:
             raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.")
 
-    def _ask_translation(self, sha, page, language, english, terms, pieces, said, todo, on_line):
+    def _ask_translation(self, sha, page, language, english, terms, pieces, said, todo, on_line, quick=False):
         """One request to Claude for the pieces in `todo`, each passed to `on_line` as it comes. → {id: say}"""
         source, order, wanted = dict(pieces), [pid for pid, _ in pieces], {pid for pid, _ in todo}
         # Neighbours already translated come along, so a sentence split between pieces still fits together.
@@ -787,6 +792,8 @@ class Claude:
         if terms:
             glossary = ("\nUse this wording every time these come up, so that every page says them the same way:\n"
                         + "\n".join(f"- {t['term']}: {t['say']}" for t in terms) + "\n")
+        if quick:
+            context += "\nThe document itself isn't attached to this request: work from the pieces as they are given.\n"
         task = TRANSLATE.format(page=page, language=language, english=ENGLISH[english].format(language=language),
                                 glossary=glossary, context=context, pieces="\n".join(f"{pid}: {text}" for pid, text in todo))
         got = {}
@@ -799,7 +806,7 @@ class Claude:
                 on_line({"id": pid, "say": got[pid]})
 
         feed, end = json_lines(take)
-        answer = self.run(sha, f"translate page {page} into {language}", task, feed)
+        answer = self.run(sha, f"translate page {page} into {language}{' (quick)' if quick else ''}", task, feed, document=not quick)
         end()
         if not got:  # written the way this used to be asked for, as one object
             try:
@@ -1028,7 +1035,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         try:
             claude.translate(req["doc"], int(req["page"]), req["pieces"], req["lang"], req["language"],
-                             str(req.get("english", "words")), bool(req.get("urgent")), send)
+                             str(req.get("english", "words")), bool(req.get("urgent")), send,
+                             quick=bool(req.get("urgent")) and bool(req.get("quick")))
         except (ApiError, KeyError, ValueError, TypeError) as e:
             if not started:
                 raise

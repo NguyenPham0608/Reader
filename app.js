@@ -1114,6 +1114,27 @@ const translation = {
   },
 
   /**
+   * Have a paragraph translated now, ahead of its page's turn, since it may well be read next: it
+   * opens the page in view, or the pointer rests on it. This is the request pressing it would
+   * make, so pressing it then waits for this one rather than asking again.
+   */
+  early(block, quick = false) {
+    const lang = targetLang();
+    if (!lang || !ai.available || !block || block.skip || !chunkBlock(block).length) return;
+    for (const b of partsOf(block)) this.block(b, lang, quick).catch(() => {}); // a failure is for the reading, if it comes, to report
+  },
+
+  /**
+   * The opening paragraphs of the page in view, translated at once: they are what is likely read
+   * first. Quickly, from their own text, since the document they would otherwise be read with may
+   * take a while yet to reach the server and Claude.
+   */
+  opening() {
+    const p = speaker.active?.page ?? anchor?.p ?? view.pages[0];
+    if (p) ensureBlocks(p).then((blocks) => blocks.filter((b) => !b.skip && chunkBlock(b).length).slice(0, 2).forEach((b) => this.early(b, true)));
+  },
+
+  /**
    * Translate the document into the language being read in, ahead of the voice: from the page
    * being read (or looked at) to the end, then the pages before it, a couple at a time. Pages done
    * already are passed straight over, so this can be called whenever reading starts. Choosing
@@ -1127,6 +1148,7 @@ const translation = {
     if (!lang || (usesSysVoice() && !sysVoice()) || !ai.available || !view.pages.length) { renderChip(); return; }
     const from = (speaker.active?.page ?? anchor?.p ?? view.pages[0]).n - 1;
     const todo = [...view.pages.slice(from), ...view.pages.slice(0, from)].slice(0, AHEAD_PAGES);
+    this.opening(); // not in their page's turn, which waits for Claude's layout and the glossary
     const mine = this.ahead = { lang, token, done: 0, failed: 0, total: todo.length, started: Date.now() };
     const live = () => this.ahead === mine && view.token === token;
     const work = async () => {
@@ -1196,7 +1218,7 @@ const translation = {
   },
 
   /** Ask Claude for what some blocks still need, putting each line in place as it comes. → the sentences it didn't bring */
-  async fetch(page, blocks, lang, urgent) {
+  async fetch(page, blocks, lang, urgent, quick = false) {
     const token = view.token;
     const { pieces, where } = this.plan(blocks, lang, page, !urgent);
     if (!pieces.length) return [];
@@ -1204,7 +1226,7 @@ const translation = {
     for (const c of where.values()) if (!c.asked?.[lang]?.urgent) (c.asked ??= {})[lang] = mark;
     try {
       await ai.translate({
-        page, pieces, lang, language: languageName(lang), english: englishFor(lang), urgent,
+        page, pieces, lang, language: languageName(lang), english: englishFor(lang), urgent, quick,
         onLine: (line) => { if (token === view.token) this.apply(where, line, lang); },
       });
     } finally {
@@ -1243,8 +1265,11 @@ const translation = {
     })();
   },
 
-  /** Translate one block for certain: resolves once every sentence of it has its translation, or rejects. */
-  block(block, lang) {
+  /**
+   * Translate one block for certain: resolves once every sentence of it has its translation, or
+   * rejects. `quick`: without the document (see ai.translate), if this is the first to ask for it.
+   */
+  block(block, lang, quick = false) {
     const done = () => chunkBlock(block).every((c) => c.tr?.[lang] != null);
     if (done()) return Promise.resolve();
     block.trWait ??= {};
@@ -1252,7 +1277,7 @@ const translation = {
       const token = view.token, whole = this.page(block.page, lang);
       const alone = (async () => {
         if (!(await startClaude())) throw ai.doc?.error || new AiError(ai.available ? 'api' : ai.reason);
-        const missed = await this.fetch(block.page.n, [block], lang, true);
+        const missed = await this.fetch(block.page.n, [block], lang, true, quick);
         // Claude was asked twice for these and left them out: say nothing for them rather than stall.
         if (token === view.token) for (const c of missed) { console.warn('Claude left a sentence untranslated:', c.raw); (c.tr ??= {})[lang] ??= ''; }
       })();
@@ -2676,13 +2701,16 @@ els.pages.addEventListener('click', (e) => {
   const b = blockOf.get(e.target);
   if (b && e.detail < 2) speaker.toggleBlock(b); // the second click of a double-click is handled below
 });
-// Pointing at any part of a paragraph shows all of it.
-let hovered = [];
+// Pointing at any part of a paragraph shows all of it. Resting on one a moment has it translated,
+// when reading in another language, so that a click on it needn't wait for Claude.
+let hovered = [], restTimer = 0;
 const setHover = (block) => {
   if (block ? hovered.includes(block) : !hovered.length) return;
   hovered.forEach((b) => b.el.classList.remove('hover'));
   hovered = block ? partsOf(block) : [];
   hovered.forEach((b) => b.el.classList.add('hover'));
+  clearTimeout(restTimer);
+  if (block && settings.lang) restTimer = setTimeout(() => translation.early(block), 250);
 };
 els.pages.addEventListener('mouseover', (e) => setHover(blockOf.get(e.target)));
 els.pages.addEventListener('mouseleave', () => { setHover(null); sentencePick.hide(); });
@@ -2828,4 +2856,4 @@ aiReady.then(() => {
 const linked = new URLSearchParams(location.search).get('file');
 if (linked) openPdf(new URL(linked, location.href).href, decodeURIComponent(linked.split('/').pop()).replace(/\.pdf$/i, ''));
 
-window.reader = { speaker, view, settings, voice, neural, ai, narration, sentencePick };
+window.reader = { speaker, view, settings, voice, neural, ai, narration, translation, sentencePick };

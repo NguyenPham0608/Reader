@@ -30,13 +30,15 @@ class FakeClaude(serve.Claude):
     def __init__(self, leave_out=(), leave_out_always=(), garbage=False):
         super().__init__()
         self.calls = []  # (label, task)
+        self.documents = []  # whether each call had the document
         self.later = []  # glossaries started without waiting
         self.leave_out, self.leave_out_always, self.garbage = set(leave_out), set(leave_out_always), garbage
 
     hold = None  # (entered, release): the first translation waits for `release` once it has started
 
-    def run(self, sha, label, task, on_text=None, turns=()):
+    def run(self, sha, label, task, on_text=None, turns=(), document=True):
         self.calls.append((label, task))
+        self.documents.append(document)
         if self.hold and label.startswith("translate"):
             (entered, release), self.hold = self.hold, None
             entered.set()
@@ -127,7 +129,7 @@ class TranslateTest(unittest.TestCase):
 
     def test_an_answer_in_the_old_single_object_form_is_accepted(self):
         claude = FakeClaude()
-        claude.run = lambda sha, label, task, on_text=None, turns=(): json.dumps(
+        claude.run = lambda sha, label, task, on_text=None, turns=(), document=True: json.dumps(
             {"lines": [{"id": "1.0", "say": "một"}]}) if label.startswith("translate") else '{"terms": []}'
         self.assertEqual(self.translate(claude, 2, pieces("1.0")), {"1.0": "một"})
 
@@ -225,6 +227,20 @@ class TranslateTest(unittest.TestCase):
         urgent.join(5)
         waiting.join(5)
         self.assertEqual(sorted(line["id"] for line in got), ["1.0", "1.1"])
+
+    def test_a_quick_request_goes_without_the_document_or_the_glossary(self):
+        claude = FakeClaude()
+        out = []
+        claude.translate(SHA, 1, pieces("0.0", "1.0"), "vi-VN", "Vietnamese", "words", True, out.append, quick=True)
+        self.assertEqual({line["id"] for line in out}, {"0.0", "1.0"})
+        self.assertEqual(claude.documents, [False])
+        self.assertEqual(claude.later, [])  # the glossary is left to the pages' requests, which come with the document
+        self.assertIn("isn't attached to this request", claude.translations()[0])
+        self.assertIn("(quick)", claude.calls[0][0])
+        # What it brought is there for the page's own request, which asks only for the rest.
+        self.translate(claude, 1, pieces("0.0", "1.0", "2.0"), english="words", urgent=False)
+        self.assertEqual(set(asked(claude.translations()[-1])), {"2.0"})
+        self.assertTrue(claude.documents[-1])
 
     def test_the_glossary_can_be_worked_out_ahead(self):
         claude = FakeClaude()
