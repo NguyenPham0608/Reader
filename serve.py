@@ -351,7 +351,8 @@ class Claude:
         has_login = (Path.home() / ".config" / "anthropic").exists()
         if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or has_login):
             return {"available": False, "reason": "no_key", "model": MODEL}
-        return {"available": True, "reason": None, "model": MODEL}
+        # `cache`: the page keeps answers too, and drops them when this changes.
+        return {"available": True, "reason": None, "model": MODEL, "cache": f"{PROMPT_VERSION}.{TRANSLATE_VERSION}"}
 
     def client(self):
         if anthropic is None:
@@ -668,23 +669,24 @@ class Claude:
             except ApiError as e:  # the glossary only keeps the wording steady: translate without it
                 print(f"[claude] could not settle the wording for {language}: {e.message}", flush=True)
                 terms = None
-            # Pieces another request is translating right now: wait for those rather than pay twice.
-            with self._lock:
-                busy = [claims[keys[pid]] for pid, _ in pieces if pid not in said and keys[pid] in claims]
-            until = time.time() + 120
-            for event in busy:
-                event.wait(max(0.0, until - time.time()))
             from_cache()  # including what other requests brought meanwhile
-        answered = False
+        until = time.time() + 120
         for _ in range(2):
             todo = [(pid, text) for pid, text in pieces if pid not in said]
             if not todo:
                 break
-            mine = {}
+            # Each piece is translated by the one request that claims it. A page request leaves pieces
+            # another request is translating right now to that one, and waits for them, rather than
+            # pay for them twice; someone waiting to hear a piece (`urgent`) asks for it regardless.
+            mine, theirs = {}, []
             with self._lock:
                 for pid, _ in todo:
-                    if keys[pid] not in claims:
-                        claims[keys[pid]] = mine[keys[pid]] = threading.Event()
+                    key = keys[pid]
+                    if key not in claims:
+                        claims[key] = mine[key] = threading.Event()
+                    elif not urgent:
+                        theirs.append(claims[key])
+            ask = [(pid, text) for pid, text in todo if urgent or keys[pid] in mine]
 
             def heard(line):  # kept the moment it arrives, so other requests can use it at once
                 key = keys[line["id"]]
@@ -696,18 +698,20 @@ class Claude:
                 on_line(line)
 
             try:
-                got = self._ask_translation(sha, page, language, english, terms, pieces, said, todo, heard)
+                got = self._ask_translation(sha, page, language, english, terms, pieces, said, ask, heard) if ask else {}
             finally:
                 with self._lock:
                     for key, event in mine.items():
                         claims.pop(key, None)
                         event.set()
             if got:
-                answered = True
+                said.update(got)
                 with self._file_lock(store):
                     write_json(store, {"pieces": dict(known)})
-                said.update(got)
-        if not answered:
+            for event in theirs:
+                event.wait(max(0.0, until - time.time()))
+            from_cache()  # what the other requests brought (a piece they missed is asked for next time round)
+        if not said:
             raise ApiError(502, "bad_output", "Claude's answer was not in the expected form.")
 
     def _ask_translation(self, sha, page, language, english, terms, pieces, said, todo, on_line):

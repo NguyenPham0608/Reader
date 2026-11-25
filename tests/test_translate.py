@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -182,11 +183,61 @@ class TranslateTest(unittest.TestCase):
         self.assertEqual(page, {"1.0": "VI sentence 1.0", "1.1": "VI sentence 1.1"})
         self.assertEqual([set(asked(t)) for t in claude.translations()], [{"1.0"}, {"1.1"}])
 
+    def test_a_page_request_whose_pieces_another_request_brings_is_not_an_error(self):
+        claude, entered, release = FakeClaude(), threading.Event(), threading.Event()
+        claude.hold = (entered, release)
+        urgent = threading.Thread(target=self.translate, args=(claude, 2, pieces("1.0")), kwargs={"urgent": True})
+        urgent.start()
+        self.assertTrue(entered.wait(5))
+        page, errors = {}, []
+
+        def later():
+            try:
+                page.update(self.translate(claude, 2, pieces("1.0"), urgent=False))
+            except serve.ApiError as e:
+                errors.append(e)
+
+        waiting = threading.Thread(target=later)
+        waiting.start()
+        time.sleep(0.3)
+        release.set()
+        urgent.join(5)
+        waiting.join(5)
+        self.assertEqual(errors, [])
+        self.assertEqual(page, {"1.0": "VI sentence 1.0"})
+        self.assertEqual(len(claude.translations()), 1)
+
+    def test_a_page_request_asks_for_the_rest_while_another_request_brings_some(self):
+        claude, entered, release = FakeClaude(), threading.Event(), threading.Event()
+        claude.hold = (entered, release)
+        urgent = threading.Thread(target=self.translate, args=(claude, 2, pieces("1.0")), kwargs={"urgent": True})
+        urgent.start()
+        self.assertTrue(entered.wait(5))
+        got = []
+        waiting = threading.Thread(target=lambda: claude.translate(SHA, 2, pieces("1.0", "1.1"), "vi-VN", "Vietnamese", "none", False, got.append))
+        waiting.start()
+        for _ in range(50):  # 1.1 comes while 1.0 is still held up in the other request
+            if got:
+                break
+            time.sleep(0.05)
+        self.assertEqual([line["id"] for line in got], ["1.1"])
+        release.set()
+        urgent.join(5)
+        waiting.join(5)
+        self.assertEqual(sorted(line["id"] for line in got), ["1.0", "1.1"])
+
     def test_the_glossary_can_be_worked_out_ahead(self):
         claude = FakeClaude()
         self.assertEqual(claude.glossary(SHA, "vi-VN", "Vietnamese", "none"), [{"term": "system block", "say": "khối hệ"}])
         self.translate(claude, 2, pieces("1.0"), urgent=True)
         self.assertIn("- system block: khối hệ", claude.translations()[0])
+
+    def test_the_status_names_the_prompt_version_the_page_keys_its_answers_by(self):
+        with unittest.mock.patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test"}), \
+                unittest.mock.patch.object(serve, "anthropic", serve.anthropic or object()):  # as if the SDK were installed
+            status = FakeClaude().status()
+        self.assertTrue(status["available"])
+        self.assertEqual(status["cache"], f"{serve.PROMPT_VERSION}.{serve.TRANSLATE_VERSION}")
 
     def test_the_prompt_asks_for_numbers_in_words_and_no_identifiers(self):
         claude = FakeClaude()

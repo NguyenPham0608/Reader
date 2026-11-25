@@ -1,12 +1,12 @@
 {
   "app.js": {
-    "mtime": 1795398976.3729734,
-    "ast_hash": "818bddd5eb64456e055950f3e9acbe01",
+    "mtime": 1795584158.1354482,
+    "ast_hash": "df2eed53228c16185f32146e6834da01",
     "semantic_hash": ""
   },
   "serve.py": {
-    "mtime": 1795398224.8426967,
-    "ast_hash": "4808cf7d4f4aa511652ee96e6be5e01a",
+    "mtime": 1795584653.2466779,
+    "ast_hash": "a2ce43bf1fc150e06042e4102d78921e",
     "semantic_hash": ""
   },
   "vendor/pdfjs/pdf.min.mjs": {
@@ -35,13 +35,13 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795299990.6021137,
+    "mtime": 1795583542.42174,
     "ast_hash": "10a7f15d257c18476c3733d6b0c2d368",
     "semantic_hash": ""
   },
   "ai.js": {
-    "mtime": 1795398224.8709974,
-    "ast_hash": "9f241341c1ea678db808a193396af9ac",
+    "mtime": 1795583952.7853818,
+    "ast_hash": "f4bb1d773b8d34703f163ddf2f94189a",
     "semantic_hash": ""
   },
   "vendor/phonon/device.js": {
@@ -235,8 +235,18 @@
     "semantic_hash": ""
   },
   "tests/test_translate.py": {
-    "mtime": 1795398196.2515473,
-    "ast_hash": "bf33a7af128fed131a7733561fff9c06",
+    "mtime": 1795584646.8830764,
+    "ast_hash": "9a1bd78ac3fb7b1c9ed498e172b4a39b",
+    "semantic_hash": ""
+  },
+  "cache.js": {
+    "mtime": 1795583922.999967,
+    "ast_hash": "26dc0c508517b358e145e91ad9dd70aa",
+    "semantic_hash": ""
+  },
+  "tests/cache.test.mjs": {
+    "mtime": 1795584048.13941,
+    "ast_hash": "ec3be4e033a93bc650337959da82050c",
     "semantic_hash": ""
   }
 }

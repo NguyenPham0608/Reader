@@ -1,5 +1,9 @@
 // The page's side of the Claude features. All requests go to the reader's server (serve.py),
 // which holds the API key and talks to Claude; nothing here contacts Anthropic directly.
+// Answers about a document's pages are also kept in this browser (cache.js), and asked for
+// only when they aren't there.
+
+import { shelf, hashKey, fingerprint } from './cache.js';
 
 // Where that server is when this page is opened from somewhere that only hosts the page itself
 // (GitHub Pages, or an editor's live preview). The server has to allow that site in
@@ -74,6 +78,7 @@ export const ai = {
   available: false,
   reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key | elsewhere | waking | unreachable
   model: '',
+  cacheVersion: '', // the server's prompt version: answers kept in the browser under another are not used
   /** The open document as Claude knows it: { state, id, notes, error, ready } */
   doc: null,
   onChange: () => {},
@@ -89,7 +94,7 @@ export const ai = {
       if (s && s !== 'other') base = HOSTED_BACKEND;
       else s = { available: false, reason: ON_THIS_MACHINE && !FORCE_HOSTED ? 'elsewhere' : 'unreachable' };
     }
-    Object.assign(this, { available: !!s.available, reason: s.reason || null, model: s.model || '' });
+    Object.assign(this, { available: !!s.available, reason: s.reason || null, model: s.model || '', cacheVersion: s.cache || '0' });
     this.onChange();
   },
 
@@ -120,7 +125,9 @@ export const ai = {
    * it through in the background and `doc.notes` fills in.
    */
   open(payload, name) {
-    const doc = this.doc = { state: 'sending', id: null, notes: null, error: null, payload, name };
+    // `key`: the document's fingerprint, naming what this browser keeps about it (worked out here,
+    // so that it is known before the server has the document).
+    const doc = this.doc = { state: 'sending', id: null, notes: null, error: null, payload, name, key: fingerprint(payload) };
     doc.ready = (async () => {
       try {
         await this.register(doc, false);
@@ -161,8 +168,7 @@ export const ai = {
   },
 
   /** Run a request against the open document, sending the document again once if the server lost it. */
-  async withDoc(fn) {
-    const doc = this.doc;
+  async withDoc(fn, doc = this.doc) {
     if (!doc) throw new AiError('api');
     await doc.ready;
     try {
@@ -174,14 +180,32 @@ export const ai = {
     }
   },
 
+  /** The shelf in this browser for one kind of answer about a document, or null if there can't be one. */
+  async shelf(doc, name) {
+    const key = await doc.key;
+    return key ? shelf(`${key}/${this.cacheVersion}/${name}`) : null;
+  },
+
+  /** An answer kept in this browser for the same question about the open document, or else Claude's (then kept). */
+  async recall(name, question, ask) {
+    const doc = this.doc;
+    if (!doc) throw new AiError('api');
+    const kept = await this.shelf(doc, name), key = hashKey(JSON.stringify(question));
+    const known = kept?.get(key);
+    if (known !== undefined) return known;
+    const answer = await this.withDoc(ask, doc);
+    kept?.set(key, answer);
+    return answer;
+  },
+
   /** Ask which of a page's lines make up each paragraph. → { blocks: [{ kind, lines: [line id] }] } in reading order */
   layout(page, lines) {
-    return this.withDoc((doc) => postJson('/api/layout', { doc: doc.id, page, lines }));
+    return this.recall('layout', { page, lines }, (doc) => postJson('/api/layout', { doc: doc.id, page, lines }));
   },
 
   /** Ask which pieces of a page need different words when spoken. → { changes: [{id, say}], skip: [block] } */
   narrate(page, pieces) {
-    return this.withDoc((doc) => postJson('/api/narrate', { doc: doc.id, page, pieces }));
+    return this.recall('narrate', { page, pieces }, (doc) => postJson('/api/narrate', { doc: doc.id, page, pieces }));
   },
 
   /** Have the wording a translation keeps to worked out ahead of the first request for one. */
@@ -194,14 +218,31 @@ export const ai = {
    * ('fr', 'pt-BR'), `language` its name in English, `english` how much English the voice says
    * the English way ('words', 'acronyms' or 'none'). `onLine({ id, say })` receives each piece as
    * soon as it is translated; a piece Claude couldn't translate never comes. `urgent`: someone
-   * is waiting to hear it. Resolves once every line is in.
+   * is waiting to hear it. Resolves once every line is in. Pieces translated before, in this
+   * browser, come from what it kept and aren't asked for.
    */
-  translate({ page, pieces, lang, language, english, urgent = false, onLine }) {
+  async translate({ page, pieces, lang, language, english, urgent = false, onLine }) {
+    const doc = this.doc;
+    if (!doc) throw new AiError('api');
+    const kept = await this.shelf(doc, `translated-${lang}-${english}`);
+    // Keyed like the server's: a piece from another page ('13:0.0') under that page.
+    const keyOf = (p) => hashKey(JSON.stringify([p.id.includes(':') ? Number(p.id.split(':')[0]) : page, p.text]));
+    const asking = new Map();
+    for (const p of pieces) {
+      const said = kept?.get(keyOf(p));
+      if (said !== undefined) onLine({ id: p.id, say: said }); else asking.set(p.id, p);
+    }
+    if (!asking.size) return;
+    const heard = (line) => {
+      const p = asking.get(line.id);
+      if (p && typeof line.say === 'string') kept?.set(keyOf(p), line.say);
+      onLine(line);
+    };
     return this.withDoc(async (doc) => {
-      const { res, done } = await post('/api/translate', { doc: doc.id, page, pieces, lang, language, english, urgent }, { timeout: 240000 });
+      const { res, done } = await post('/api/translate', { doc: doc.id, page, pieces: [...asking.values()], lang, language, english, urgent }, { timeout: 240000 });
       try {
         if (!res.headers.get('Content-Type')?.includes('ndjson')) { // a server from before answers all at once
-          for (const line of (await res.json()).lines || []) onLine(line);
+          for (const line of (await res.json()).lines || []) heard(line);
           return;
         }
         let buf = '', finished = false;
@@ -209,7 +250,7 @@ export const ai = {
           if (!line.trim()) return;
           const msg = JSON.parse(line);
           if (msg.error) throw new AiError(msg.error, MESSAGES[msg.error] || msg.message);
-          if (msg.done) finished = true; else onLine(msg);
+          if (msg.done) finished = true; else heard(msg);
         };
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -225,7 +266,7 @@ export const ai = {
       } finally {
         done();
       }
-    });
+    }, doc);
   },
 
   /**

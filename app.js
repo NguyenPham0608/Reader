@@ -818,8 +818,10 @@ async function openPdf(source, name) {
     if (token !== view.token) return;
     if (lead.every((b) => !b.length)) {
       toast('No selectable text found — this looks like a scanned PDF, which can’t be read aloud.', 7000);
-    } else if (settings.ai) {
-      startClaude().then(() => pages.filter((p) => p.near).forEach((p) => narration.request(p)));
+    } else {
+      if (settings.ai) startClaude().then(() => pages.filter((p) => p.near).forEach((p) => narration.request(p)));
+      // Reading in another language: have the document translated before it is listened to.
+      if (settings.lang) aiReady.then(() => { if (token === view.token) translation.all(); });
     }
     for (const p of pages) {
       if (token !== view.token) return;
@@ -839,6 +841,7 @@ function closeDoc() {
   view.task?.destroy();
   view.task = null;
   narration.reset();
+  translation.ahead = null;
   chat.close();
   ai.close();
   els.pages.replaceChildren();
@@ -911,11 +914,15 @@ const TEXT_CHAR_LIMIT = 1.6e6;     // about 400,000 tokens
 
 const usingClaude = () => settings.ai && ai.usable;
 
-/** Send the open document to Claude, if that hasn't happened yet. Resolves when Claude can take requests. */
+/**
+ * Send the open document to Claude, if that hasn't happened yet. Resolves when Claude can take
+ * requests: after sending it the first time, at once after that, even while it is still on its
+ * way (requests wait for it themselves, and answers kept in this browser don't need it).
+ */
 async function startClaude() {
   await aiReady;
   if (!view.doc || !ai.available) return false;
-  if (ai.doc && ai.doc.state !== 'error') return ai.doc.ready.then(() => true, () => false);
+  if (ai.doc && ai.doc.state !== 'error') return true;
   const token = view.token;
   let payload = view.bytes;
   if (view.pages.length > PDF_PAGE_LIMIT || payload.length > PDF_BYTE_LIMIT) {
@@ -1084,16 +1091,72 @@ const narration = {
  * it gets. A page is translated in one request, ahead of the voice; the paragraph about to be
  * spoken is also asked for on its own, since that request is small and need not wait for the
  * glossary that page requests use. Both stream, so speech starts with the first sentence in.
+ * Meanwhile the whole document is translated in the background (`all`), and everything Claude
+ * says is kept in this browser, so a document opened again is in that language at once.
  */
+const AHEAD_PAGES = 60;   // pages translated in the background from the one being read: all of most papers
+const AHEAD_AT_ONCE = 2;  // pages translated at a time, leaving Claude room for the paragraph being read
+const STOP_AHEAD = new Set(['limit', 'auth', 'no_key', 'no_sdk', 'too_long', 'too_large']); // errors that more pages would only repeat
+
 const translation = {
+  /** The background translation under way: { lang, token, done, failed, total, started }, or null. */
+  ahead: null,
+
   /**
-   * Have the open document's glossary for the language being read in worked out now, while
-   * nothing waits on it, so that even the first paragraph read keeps to the same wording.
+   * Get ready to read in the language chosen: translate the document in the background, and have
+   * its glossary worked out now, while nothing waits on it, so that even the first paragraph read
+   * keeps to the same wording.
    */
   prepare() {
+    this.all();
     const lang = targetLang();
     if (!lang || !usingClaude()) return;
     ai.glossary({ lang, language: languageName(lang), english: englishFor(lang) }).catch((e) => console.warn('Claude could not settle the wording', e));
+  },
+
+  /**
+   * Translate the document into the language being read in, ahead of the voice: from the page
+   * being read (or looked at) to the end, then the pages before it, a couple at a time. Pages done
+   * already are passed straight over, so this can be called whenever reading starts. Choosing
+   * "As written" or another language, or opening another document, stops it.
+   */
+  all() {
+    const lang = targetLang(), token = view.token, run = this.ahead;
+    if (run && run.lang === lang && run.token === token) return; // under way already
+    this.ahead = null;
+    // No system voice for the language yet (the browser may still be listing them): it isn't known which variety to translate into.
+    if (!lang || (usesSysVoice() && !sysVoice()) || !ai.available || !view.pages.length) { renderChip(); return; }
+    const from = (speaker.active?.page ?? anchor?.p ?? view.pages[0]).n - 1;
+    const todo = [...view.pages.slice(from), ...view.pages.slice(0, from)].slice(0, AHEAD_PAGES);
+    const mine = this.ahead = { lang, token, done: 0, failed: 0, total: todo.length, started: Date.now() };
+    const live = () => this.ahead === mine && view.token === token;
+    const work = async () => {
+      while (live() && todo.length) {
+        const p = todo.shift();
+        let error = await this.page(p, lang);
+        // Too many requests at once: give Claude a little while, then try the page again.
+        for (let wait = 15e3; error?.code === 'rate_limit' && wait <= 60e3 && live(); wait *= 2) {
+          await new Promise((r) => setTimeout(r, wait));
+          if (live()) error = await this.page(p, lang);
+        }
+        if (!live()) return;
+        if (error && (STOP_AHEAD.has(error.code) || ai.doc?.state === 'error')) { this.ahead = null; renderChip(); return; }
+        mine.done++;
+        if (error) mine.failed++; // left to be translated as it is read
+        renderChip();
+      }
+    };
+    renderChip();
+    Promise.all(Array.from({ length: AHEAD_AT_ONCE }, work)).then(() => {
+      if (!live()) return;
+      this.ahead = null;
+      renderChip();
+      // Said only when it took a while: a document translated before is ready at once.
+      if (Date.now() - mine.started < 5000) return;
+      const what = mine.total === view.pages.length ? 'The whole document is' : `${mine.total} pages are`;
+      toast(mine.failed ? `${mine.failed} of ${mine.total} pages couldn’t be translated ahead; they will be as they are read.`
+        : `${what} translated into ${languageName(lang)}.`, 3500);
+    });
   },
 
   /**
@@ -1152,20 +1215,27 @@ const translation = {
     return [...where.values()].filter((c) => c.tr?.[lang] == null);
   },
 
-  /** Translate a whole page. Resolves when it has been tried; sentences it missed are left for `block`. */
+  /**
+   * Translate a whole page. Resolves when it has been tried: to nothing, or to why it failed.
+   * Sentences it missed are left for `block`.
+   */
   page(p, lang) {
     p.tr ??= {};
     return p.tr[lang] ??= (async () => {
       const token = view.token, mine = p.tr;
       try {
-        if (!(await startClaude())) return;
+        if (!(await startClaude())) throw ai.doc?.error || new AiError(ai.available ? 'api' : ai.reason);
         await narration.request(p); // so the paragraphs are Claude's before they are translated
         const blocks = await ensureBlocks(p);
-        if (token !== view.token || p.tr !== mine) return;
+        if (token !== view.token) return null;
+        // Claude regrouped the page's paragraphs meanwhile, which set this request aside: translate the new ones.
+        if (p.tr !== mine) return this.page(p, lang);
         await this.fetch(p.n, blocks.filter((b) => !b.skip), lang, false);
+        return null;
       } catch (e) {
         console.warn('Claude could not translate page', p.n, e);
         if (p.tr === mine) p.tr[lang] = null; // allow another try later
+        return e;
       }
     })();
   },
@@ -1449,7 +1519,10 @@ const speaker = {
       if (from) s.segs = s.segs.slice(Math.max(0, s.segs.findIndex((seg) => holds(seg, from))));
       if (settings.scope === 'sentence') s.segs.length = Math.min(1, s.segs.length);
       for (const b of partsOf(block).reverse()) narration.request(b.page, true);
-      if (s.lang) for (const b of partsOf(block)) translation.page(b.page, s.lang);
+      if (s.lang) {
+        for (const b of partsOf(block)) translation.page(b.page, s.lang);
+        translation.all(); // from here on, if it isn't under way already
+      }
     }
     if (s.neural) neural.load(s.neural); else if (voice.state === 'error' && !s.sys) voice.load();
     renderPlayer();
@@ -2254,6 +2327,10 @@ function renderChip() {
     state = 'busy'; text = 'Sending to Claude…';
   } else if (ai.doc?.state === 'reading') {
     state = 'busy'; text = 'Claude is reading…'; title = 'Claude is reading the whole document. You can start listening already.';
+  } else if (translation.ahead) {
+    const { lang, done, total } = translation.ahead;
+    state = 'busy'; text = `Translating ${done}/${total}`;
+    title = `Claude is translating the document into ${languageName(lang)}: ${done} of ${total} pages done. You can start listening already.`;
   }
   els.aiChip.dataset.state = state;
   els.aiChip.title = title;
@@ -2372,6 +2449,7 @@ function refreshSysVoices() {
   buildLangMenu();
   buildVoiceMenu();
   renderPlayer();
+  translation.all(); // the language's system voice may have just turned up
 }
 
 // ── Preferences: the highlight colours ──────────────────────────────────────
