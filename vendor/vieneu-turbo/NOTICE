@@ -1,0 +1,11 @@
+voices.json
+  Two preset voices of VieNeu-TTS v3 Turbo, Trúc Ly (female) and Hải Đăng (male): their speaker
+  embeddings and reference codes, from the vieneu Python package's voices_v3_turbo.json, with the
+  codec's padding frame dropped from the end of the codes as that package does. Apache License
+  2.0, by Phạm Nguyễn Ngọc Bảo. https://github.com/pnnbao97/VieNeu-TTS
+
+The model itself is not kept here: neural.js fetches it from
+https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo (Apache-2.0), and the audio codec it speaks
+through from https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX (Apache-2.0),
+when a voice is first used. The text is turned into the model's phonemes on the reader's server by
+sea-g2p (https://github.com/pnnbao97/sea-g2p), the model's own front end.

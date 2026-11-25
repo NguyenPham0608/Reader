@@ -17,7 +17,13 @@ services:
         value: 3.13.14
       - key: ANTHROPIC_API_KEY
         sync: false # Render asks for it when the blueprint is created
-      - key: READER_DAILY_BUDGET
+      # Azure's neural voices (optional): the key of an Azure Speech resource and its region,
+      # such as westus2. Without them the page's own voices speak.
+      - key: AZURE_SPEECH_KEY
+        sync: false
+      - key: AZURE_SPEECH_REGION
+        sync: false
+      - key: READER_DAILY_BUDGET # dollars a day of Claude and Azure use together
         value: 3
       - key: READER_ACCESS
         value: open

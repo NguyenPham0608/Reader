@@ -4,6 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reader</title>
+<script>
+  // Where the host doesn't make the page cross-origin isolated (GitHub Pages), a service worker
+  // does, so the voices can use every processor core. It takes over from the next load: reload
+  // once, and only once, should something stop it from working.
+  if (!self.crossOriginIsolated && self.isSecureContext && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('coi-serviceworker.js')
+      .catch((e) => console.warn('Could not start the service worker that lets the voices use every core:', e));
+    navigator.serviceWorker.ready.then(() => {
+      if (!navigator.serviceWorker.controller && !sessionStorage.getItem('coi-reloaded')) {
+        sessionStorage.setItem('coi-reloaded', '1');
+        location.reload();
+      }
+    });
+  }
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1b19'/%3E%3Cpath d='M8 14v4M12 10v12M16 7v18M20 11v10M24 14v4' stroke='%23f3f1ec' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   :root {

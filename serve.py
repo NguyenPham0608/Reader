@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["anthropic>=2.8,<3"]
+# dependencies = ["anthropic>=2.8,<3", "sea-g2p==0.10.0"]
 # ///
 """Reader's local server.
 
     uv run serve.py [port]        # everything, including the Claude features
     python3 serve.py [port]       # reading aloud only (no Anthropic SDK needed)
 
+With sea-g2p installed (uv run installs it) it also writes the phonemes the
+VieNeu-TTS v3 Turbo voices read; the page runs those voices itself.
+
 It serves the page, and it is the only part that talks to Claude: the browser
 sends the document here once, and asks this server to prepare pages for
 reading aloud or to explain a paragraph. The API key stays on this side, read
 from ANTHROPIC_API_KEY or from a .env file next to this script.
 
+It can also speak with Azure's neural voices (Azure AI Speech), which start at
+once with nothing to download: set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION
+(the region of the Speech resource, such as "westus2"), here or in .env.
+
 Hosted on Render (see render.yaml) it listens publicly and anyone with the
-address can use it, paid for by the owner's API key. To keep that bounded it
-stops calling Claude once a day's use reaches READER_DAILY_BUDGET dollars
-(reading aloud carries on). READER_ACCESS=password with READER_PASSWORD makes
+address can use it, paid for by the owner's API keys. To keep that bounded it
+stops calling Claude and Azure once a day's use reaches READER_DAILY_BUDGET
+dollars (reading aloud with the page's own voices carries on).
+READER_ACCESS=password with READER_PASSWORD makes
 it private instead: the browser then asks for the password, and the daily cap
 no longer applies. READER_ALLOWED_ORIGINS names other sites whose copy of the
 page may use this server, such as the GitHub Pages address; the word
@@ -35,14 +43,22 @@ import re
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from xml.sax.saxutils import escape as xml_escape
 
 try:
     import anthropic
 except ImportError:  # started with plain python3: the reader still works, without Claude
     anthropic = None
+
+try:
+    import sea_g2p  # the VieNeu-TTS v3 Turbo voices' text front end (the page offers them only with it)
+except ImportError:
+    sea_g2p = None
 
 HOSTED = os.environ.get("RENDER") == "true"  # on Render, rather than on your own machine
 _ports = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -78,6 +94,16 @@ WARM_FOR = 50 * 60  # seconds a document's prompt cache is assumed alive (it is 
 MAX_BODY = 80 * 1024 * 1024
 MAX_PDF = 32 * 1024 * 1024  # the page sends larger documents as text instead
 MAX_TEXT = 8 * 1024 * 1024
+
+MAX_PHONEMIZE = 64  # texts in one request for phonemes
+MAX_PHONEMIZE_TEXT = 2000  # characters in each: the page sends pieces of a sentence
+
+# Azure's voices the page may ask for, and the language each speaks.
+SPEECH_VOICES = {"vi-VN-HoaiMyNeural": "vi-VN", "vi-VN-NamMinhNeural": "vi-VN"}
+SPEECH_FORMAT = "audio-24khz-48kbitrate-mono-mp3"  # about 22 MB an hour
+SPEECH_PRICE = float(os.environ.get("AZURE_SPEECH_PRICE") or 16)  # dollars per million characters, for the daily cap
+MAX_SPEECH_TEXT = 3000  # characters in one request: the page sends a sentence at a time
+ENV_NAMES = ("ANTHROPIC_API_KEY", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION")  # what a .env file may set
 
 SYSTEM = (
     "You work inside a read-aloud app for PDF documents. A listener hears your words through a "
@@ -232,12 +258,14 @@ def language_of(lang, language):
 
 
 def load_env_file():
-    if not ENV_FILE.exists() or os.environ.get("ANTHROPIC_API_KEY"):
+    """Keys from the .env file next to this script, for any not set already."""
+    if not ENV_FILE.exists():
         return
     for line in ENV_FILE.read_text().splitlines():
         name, _, value = line.partition("=")
-        if name.strip() == "ANTHROPIC_API_KEY" and value.strip():
-            os.environ["ANTHROPIC_API_KEY"] = value.strip().strip("\"'")
+        name, value = name.strip(), value.strip().strip("\"'")
+        if name in ENV_NAMES and value and not os.environ.get(name):
+            os.environ[name] = value
 
 
 def read_json(path):
@@ -325,12 +353,126 @@ class Allowance:
             return
         cost = (usage.input_tokens * PRICE["input"] + (usage.cache_creation_input_tokens or 0) * PRICE["cache_write"]
                 + (usage.cache_read_input_tokens or 0) * PRICE["cache_read"] + usage.output_tokens * PRICE["output"]) / 1e6
+        self.spend(cost)
+
+    def spend(self, dollars):
+        if not OPEN:
+            return
         with self._lock:
             self._today()
-            self._spent += cost
+            self._spent += dollars
 
 
 allowance = Allowance()
+
+
+class Speech:
+    """Sentences spoken by Azure's neural voices (Azure AI Speech), on Microsoft's servers."""
+
+    def endpoint(self):
+        """Where to ask, and the key: (url, key), or (None, None) when not set up."""
+        key = os.environ.get("AZURE_SPEECH_KEY", "").strip()
+        url = os.environ.get("AZURE_SPEECH_ENDPOINT", "").strip()  # instead of a region, for tests and custom domains
+        region = os.environ.get("AZURE_SPEECH_REGION", "").strip().lower().replace(" ", "")
+        if not url and re.fullmatch(r"[a-z0-9]+", region):
+            url = f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        return (url, key) if url and key else (None, None)
+
+    def voices(self):
+        return list(SPEECH_VOICES) if self.endpoint()[0] else []
+
+    def speak(self, text, voice, rate=1.0):
+        """`text` said by `voice`, `rate` times its usual pace (0.5 to 2). → MP3 audio"""
+        url, key = self.endpoint()
+        if not url:
+            raise ApiError(503, "speech_off", "Azure's voices aren't set up on this server.")
+        if voice not in SPEECH_VOICES:
+            raise ApiError(400, "bad_request", "Unknown voice.")
+        text = " ".join(str(text).split())[:MAX_SPEECH_TEXT]
+        if not text:
+            raise ApiError(400, "bad_request", "Nothing to say.")
+        rate = min(2.0, max(0.5, float(rate)))
+        said = xml_escape(text)
+        if abs(rate - 1) >= 0.01:  # markup is billed by the character as well, so only when it's needed
+            said = f'<prosody rate="{rate:.2f}">{said}</prosody>'
+        ssml = (f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{SPEECH_VOICES[voice]}">'
+                f'<voice name="{voice}">{said}</voice></speak>')
+        allowance.check()
+        for attempt in range(3):
+            request = urllib.request.Request(url, data=ssml.encode(), method="POST", headers={
+                "Ocp-Apim-Subscription-Key": key,
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": SPEECH_FORMAT,
+                "User-Agent": "reader",
+            })
+            try:
+                with urllib.request.urlopen(request, timeout=30) as reply:
+                    audio = reply.read()
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < 2:  # the free tier takes 20 requests a minute: wait a moment
+                    try:
+                        wait = float(e.headers.get("Retry-After") or 1)
+                    except ValueError:
+                        wait = 1
+                    time.sleep(min(3.0, max(0.2, wait)))
+                    continue
+                print(f"[speech] Azure answered {e.code} for {voice}", flush=True)
+                raise self._failure(e.code) from e
+            except (urllib.error.URLError, OSError) as e:
+                raise ApiError(503, "offline", "Could not reach Azure's voices. Check the connection.") from e
+        allowance.spend(len(said) * SPEECH_PRICE / 1e6)
+        return audio
+
+    @staticmethod
+    def _failure(status):
+        if status == 401:
+            return ApiError(502, "speech_auth", "Azure didn't accept the speech key: check AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.")
+        if status == 403:
+            return ApiError(429, "speech_quota", "Azure won't speak any more for now: the speech key's monthly allowance may be used up.")
+        if status == 429:
+            return ApiError(429, "speech_busy", "Azure's voices are busy (the free tier takes 20 sentences a minute).")
+        return ApiError(502, "speech", f"Azure couldn't speak that sentence ({status}).")
+
+
+speech = Speech()
+
+
+class Phonemizer:
+    """Vietnamese text as the phonemes the VieNeu-TTS v3 Turbo voices read, written by sea-g2p,
+    the model's own front end (it also says numbers, dates and abbreviations in words). The page
+    runs the voice itself; this part is a compiled library with a large dictionary, so it runs here."""
+
+    def __init__(self):
+        self._pipeline = None
+        self._lock = threading.Lock()
+
+    def available(self):
+        return sea_g2p is not None
+
+    def run(self, texts):
+        """→ the phonemes of each text, in order"""
+        if sea_g2p is None:
+            raise ApiError(503, "phonemes_off", "This server can't prepare text for the VieNeu voices (sea-g2p isn't installed).")
+        if not isinstance(texts, list) or len(texts) > MAX_PHONEMIZE:
+            raise ApiError(400, "bad_request", f"Send a list of at most {MAX_PHONEMIZE} texts.")
+        with self._lock:
+            if self._pipeline is None:
+                self._pipeline = sea_g2p.SEAPipeline(lang="vi")
+            pipeline = self._pipeline
+        out = []
+        for text in texts:
+            text = " ".join(str(text).split())[:MAX_PHONEMIZE_TEXT]
+            out.append(pipeline.run(text, punc_norm=True) if text else "")  # as VieNeu-TTS calls it: punctuation settled
+        return out
+
+
+phonemizer = Phonemizer()
+
+
+def status():
+    """What the page can use here: Claude, phonemes for the VieNeu Turbo voices, and which of Azure's voices."""
+    return {**claude.status(), "phonemes": phonemizer.available(), "speech": speech.voices()}
 
 
 class Claude:
@@ -374,7 +516,8 @@ class Claude:
             raise ApiError(401, "auth", "That key was not accepted.") from e
         except anthropic.APIError as e:
             raise ApiError(502, "api", f"Could not check the key: {e}") from e
-        ENV_FILE.write_text(f"ANTHROPIC_API_KEY={key}\n")
+        others = [ln for ln in ENV_FILE.read_text().splitlines() if ln.partition("=")[0].strip() != "ANTHROPIC_API_KEY"] if ENV_FILE.exists() else []
+        ENV_FILE.write_text("\n".join([f"ANTHROPIC_API_KEY={key}", *others]) + "\n")  # keeping the Azure key, if there
         ENV_FILE.chmod(0o600)
         os.environ["ANTHROPIC_API_KEY"] = key
         with self._lock:
@@ -898,7 +1041,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self._allowed():
             return self._json({"error": "forbidden"}, 403)
         if urlparse(self.path).path == "/api/status":
-            return self._json(claude.status())
+            return self._json(status())
         self._json({"error": "not_found"}, 404)
 
     def do_POST(self):
@@ -921,7 +1064,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             req = json.loads(raw or b"{}")
             if url.path == "/api/key":
                 claude.set_key(str(req.get("key", "")).strip())
-                return self._json(claude.status())
+                return self._json(status())
+            if url.path == "/api/phonemize":
+                return self._json({"phonemes": phonemizer.run(req.get("texts"))})
+            if url.path == "/api/speak":
+                audio = speech.speak(req["text"], str(req.get("voice", "")), float(req.get("rate", 1)))
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Content-Length", str(len(audio)))
+                self.end_headers()
+                return self.wfile.write(audio)
             if url.path == "/api/understand":
                 return self._json(claude.understand(req["doc"]))
             if url.path == "/api/layout":
@@ -1014,6 +1166,9 @@ if __name__ == "__main__":
         note = {"no_sdk": "off (start with 'uv run serve.py' to turn it on)", "no_key": "waiting for an API key", None: f"on, using {MODEL}"}
         print(f"Reader is running at {url}  (Ctrl+C to stop)", flush=True)
         print(f"Claude features: {note[state['reason']]}", flush=True)
+        print(f"VieNeu Turbo voices: {'on' if phonemizer.available() else 'off (start with uv run serve.py, which installs sea-g2p)'}", flush=True)
+        voices = speech.voices()
+        print(f"Azure voices: {'on (' + ', '.join(voices) + ')' if voices else 'off (set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION to turn them on)'}", flush=True)
         if OPEN:
             print(f"Open to anyone with the address; Claude use stops at ${DAILY_BUDGET:g} a day.", flush=True)
         elif HOSTED:
