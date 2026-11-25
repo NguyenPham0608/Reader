@@ -102,33 +102,6 @@ export function shelf(id) {
   return s;
 }
 
-// Sound from Azure's voices, a sentence at a time, in the Cache API rather than on a shelf:
-// shelves are read whole, which suits short answers, not audio. The oldest go past SOUND_KEEP.
-const SOUND = 'reader-sound-v1';
-const SOUND_KEEP = 3000; // sentences: about 100 MB
-let soundAdded = 0;
-
-/** The audio kept under `key`, or else `make()`'s (then kept). `make` → ArrayBuffer */
-export async function keptSound(key, make) {
-  let cache = null;
-  try { cache = await caches.open(SOUND); } catch {} // no Cache API (a page not on https or localhost)
-  const name = new Request(`https://reader.invalid/sound/${key}`);
-  const kept = await cache?.match(name).catch(() => null);
-  if (kept) return kept.arrayBuffer();
-  const bytes = await make();
-  if (cache) {
-    cache.put(name, new Response(bytes.slice(0), { headers: { 'Content-Type': 'audio/mpeg' } }))
-      .then(() => { if (++soundAdded % 50 === 0) return trimSound(cache); })
-      .catch(() => {});
-  }
-  return bytes;
-}
-
-async function trimSound(cache) {
-  const keys = await cache.keys(); // oldest first
-  await Promise.all(keys.slice(0, Math.max(0, keys.length - SOUND_KEEP)).map((k) => cache.delete(k)));
-}
-
 /** A short, stable name for a long string (106 bits: two 53-bit hashes). */
 export function hashKey(str) {
   const h = (seed) => {

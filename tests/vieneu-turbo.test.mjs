@@ -115,3 +115,21 @@ test('a NumPy .npz is read, as floats, whatever their width', () => {
   assert.deepEqual(got.xvec_ln_eps.shape, []);
   assert.ok(Math.abs(got.xvec_ln_eps.data[0] - 1e-5) < 1e-12);
 });
+
+test('the code scores are added onto the acoustic model as one more input, output and three nodes', async () => {
+  const { gemmModel, withHead, protoFields } = await import('../vieneu-turbo-lib.js');
+  const base = gemmModel(3, 2, Float32Array.from([1, 2, 3, 4, 5, 6])); // stands in for the acoustic model
+  const fused = withHead(base, 2, 3, 2, new Float32Array(12));
+  const top = (m) => protoFields(m).map((f) => f.num);
+  assert.deepEqual(top(fused).sort(), top(base).sort()); // IR version, opset and graph, nothing lost
+  const graphOf = (m) => { const g = protoFields(m).find((f) => f.num === 7); return m.subarray(g.body, g.end); };
+  const names = (g, num) => protoFields(g).filter((f) => f.num === num).map((f) => {
+    const sub = g.subarray(f.body, f.end), name = protoFields(sub).find((x) => x.num === (num === 1 ? 4 : 1));
+    return new TextDecoder().decode(sub.subarray(name.body, name.end));
+  });
+  const g = graphOf(fused);
+  assert.deepEqual(names(g, 1), ['Gemm', 'Gather', 'Gather', 'Gemm']);
+  assert.deepEqual(names(g, 11), ['x', 'codebook']);
+  assert.deepEqual(names(g, 12), ['y', 'logits']);
+  assert.equal(protoFields(g).filter((f) => f.num === 5).length, 3); // the base's weights, the index, the codebooks' weights
+});

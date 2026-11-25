@@ -1,6 +1,6 @@
 import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
 import { PhononTTS } from './vendor/phonon/index.js';
-import { NEURAL_VOICES, engineKey, loadNeural, usableVoice } from './neural.js';
+import { NEURAL_VOICES, engineKey, loadNeural, usableVoice, phonemesAhead } from './neural.js';
 import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
 import { speakable } from './speakable.js';
@@ -28,14 +28,14 @@ const STORE = 'reader.settings.v2';
 
 // `lang`: '' reads the text as written; a language code ('fr') has Claude translate it into that
 // language first. `sysVoices` is the system voice chosen for each language.
-const settings = { voice: 'Miles', speed: 1, scope: 'paragraph', zoom: 1, ai: true, lang: '', sysVoices: {}, plain: {}, own: {}, captions: true, colors: {} };
+const settings = { voice: 'Miles', speed: 1, scope: 'paragraph', zoom: 1, ai: true, lang: '', sysVoices: {}, own: {}, captions: true, colors: {} };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
 if (!VOICES.some((v) => v.name === settings.voice)) settings.voice = 'Miles';
 if (!SPEEDS.includes(settings.speed)) settings.speed = 1;
 settings.zoom = Math.min(3, Math.max(0.5, Number(settings.zoom) || 1));
 if (typeof settings.lang !== 'string' || !/^[a-z]{2,3}$/.test(settings.lang)) settings.lang = '';
 if (!settings.sysVoices || typeof settings.sysVoices !== 'object') settings.sysVoices = {};
-if (!settings.plain || typeof settings.plain !== 'object') settings.plain = {};
+delete settings.plain; // a system voice preferred over the reader's own: there is no such choice now
 if (!settings.own || typeof settings.own !== 'object') settings.own = {};
 // How much is read at a time. It used to be a switch, "keep reading", between a paragraph and the whole document.
 const SCOPES = [
@@ -77,13 +77,12 @@ function sysVoice(lang = settings.lang) {
 /** Silence the system voice. Cancelling one that is paused leaves the next waiting, hence the resume. */
 const hush = () => { synth?.cancel(); synth?.resume(); };
 /**
- * The reader's neural voice for the language being read in, where it has any and a system voice
- * wasn't preferred (`settings.plain`): the one chosen (`settings.own`), or else the first. Azure's
- * voices count only where the server offers them.
+ * The reader's own voice for the language being read in, where it has one that can run here:
+ * the one chosen (`settings.own`), or else the first.
  */
 function neuralFor(lang = settings.lang) {
   const all = NEURAL_VOICES[lang]?.filter(usableVoice);
-  return all?.length && !settings.plain[lang] ? all.find((v) => v.id === settings.own[lang]) ?? all[0] : null;
+  return all?.length ? all.find((v) => v.id === settings.own[lang]) ?? all[0] : null;
 }
 /** Whether speech comes from a system voice rather than one of the reader's own. */
 const usesSysVoice = () => !!settings.lang && settings.lang !== 'en' && !neuralFor();
@@ -91,14 +90,12 @@ const usesSysVoice = () => !!settings.lang && settings.lang !== 'en' && !neuralF
 const targetLang = () => neuralFor()?.tag ?? (usesSysVoice() ? (sysVoice() ? tagOf(sysVoice()) : settings.lang) : settings.lang);
 /**
  * How much English the voice reading a translation into `lang` says the English way, so Claude
- * knows what it may leave in English: 'words' and acronyms (VieNeu Turbo and Nano, and the
- * reader's English voices), 'acronyms' only (Piper), or 'none' (Supertonic, Azure's and the
- * system's voices).
+ * knows what it may leave in English: 'words' and acronyms (the reader's own voices, Vietnamese
+ * and English), or 'none' (the system's voices).
  */
 function englishFor(lang) {
   if (baseOf(lang) === 'en') return 'words';
-  const engine = usesSysVoice() ? null : neuralFor()?.engine;
-  return engine === 'vieneu' || engine === 'turbo' ? 'words' : engine === 'piper' ? 'acronyms' : 'none';
+  return !usesSysVoice() && neuralFor()?.engine === 'turbo' ? 'words' : 'none';
 }
 
 // ── Text analysis: PDF text items → lines → paragraphs → sentences ──────────
@@ -1214,6 +1211,10 @@ const translation = {
       for (const c of where.values()) if (c.asked[lang] === mark) delete c.asked[lang];
       speaker.translated(lang); // speech waiting on a sentence this didn't bring can ask for it now
     }
+    // The voice reads phonemes the server writes: have them written now, before anyone presses play.
+    if (token === view.token && lang === targetLang() && neuralFor()) {
+      phonemesAhead([...where.values()].map((c) => c.tr?.[lang]).filter(Boolean).map((t) => speakable(t, lang)));
+    }
     return [...where.values()].filter((c) => c.tr?.[lang] == null);
   },
 
@@ -1378,7 +1379,7 @@ const voice = {
   },
 };
 
-/** The neural voice for another language (see piper.js): loaded when first needed, one language at a time. */
+/** The reader's own voice for Vietnamese (see neural.js): loaded when first needed. */
 const neural = {
   tts: null,
   spec: null, // the voice last asked for; `key` is the engine it runs on, which other voices may share
@@ -1415,6 +1416,12 @@ const neural = {
       speaker.pump();
     })();
     return job;
+  },
+
+  /** Let go of the voice (it can't be used here after all), and of any download of it still under way. */
+  release() {
+    this.tts?.dispose();
+    Object.assign(this, { tts: null, job: null, spec: null, key: '', state: 'idle', pct: 0 });
   },
 
   /**
@@ -1469,7 +1476,7 @@ function paragraphSegs(first) {
   }
   return segs;
 }
-const SPEECH_STOPS = new Set(['speech_off', 'speech_auth', 'speech_quota', 'speech_busy', 'limit', 'offline']); // Azure's voice can't go on
+const VOICE_STOPS = new Set(['phonemes_off', 'offline']); // the server can't write the voice's phonemes: no sentence will do better
 const BUFFER_AHEAD = 25;   // seconds of audio to keep ready beyond the playhead
 const TRANSLATION_MARGIN = 8; // seconds of audio left before a sentence its page's request hasn't brought yet is asked for on its own
 
@@ -1734,6 +1741,8 @@ const speaker = {
     if (s.sys) { this.say(s, idx); return; }
     const signal = s.synthAbort.signal;
     const text = voiced(s, seg.chunk), engine = engineFor(s);
+    // The next few sentences' phonemes, written while this one is said.
+    if (s.neural && s.lang) phonemesAhead(s.segs.slice(idx + 1, idx + 6).map((x) => voiced(s, x.chunk)).filter(Boolean));
     // Reading a translation, nothing waits on word timings (the words aren't the page's), so a voice
     // that can (VieNeu Turbo) is played as it is made: a sentence starts before it is finished.
     let parts = 0;
@@ -1754,8 +1763,7 @@ const speaker = {
         s.busy = false;
         if (signal.aborted || engine.state !== 'ready') return; // interrupted, not failed: it will be asked again
         console.warn('Could not voice a sentence:', e);
-        // Azure turned the voice down for now (the key, the allowance, the connection): every sentence would fail the same way.
-        if (SPEECH_STOPS.has(e?.code)) { this.stop(); toast(`${e.message} Choose another voice to keep listening.`, 8000); return; }
+        if (VOICE_STOPS.has(e?.code)) { this.stop(); toast(`The voice couldn’t go on: ${e.message}`, 8000); return; }
         s.next = idx + 1;
         this.pump();
       },
@@ -2389,10 +2397,9 @@ const menuHead = (text) => Object.assign(document.createElement('div'), { classN
 function buildVoiceMenu() {
   const nodes = [];
   const own = NEURAL_VOICES[settings.lang]?.filter(usableVoice);
-  const online = own?.filter((v) => v.cloud) ?? [], local = own?.filter((v) => !v.cloud) ?? [];
-  if (online.length) nodes.push(menuHead('Azure · starts at once'), ...online.map((v) => menuItem({ neural: v.id }, v.name, v.tags, v.about)));
-  if (local.length) nodes.push(menuHead('The reader’s own'), ...local.map((v) => menuItem({ neural: v.id }, v.name, v.tags, `${v.about} The first use downloads about ${v.megabytes} MB.`)));
-  if (own || usesSysVoice()) {
+  // The reader's own voices for the language, or, where they can't run, the system's.
+  if (own?.length) nodes.push(menuHead('The reader’s own'), ...own.map((v) => menuItem({ neural: v.id }, v.name, v.tags, `${v.about} The first use downloads about ${v.megabytes} MB.`)));
+  else if (usesSysVoice()) {
     const all = voicesFor(settings.lang);
     for (const tag of [...new Set(all.map(tagOf))].sort()) {
       nodes.push(menuHead(languageName(tag)));
@@ -2712,8 +2719,8 @@ els.speedSel.addEventListener('change', () => {
 els.voiceMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  if (item.dataset.neural) { delete settings.plain[settings.lang]; settings.own[settings.lang] = item.dataset.neural; }
-  else if (item.dataset.uri) { settings.sysVoices[settings.lang] = item.dataset.uri; if (NEURAL_VOICES[settings.lang]) settings.plain[settings.lang] = true; }
+  if (item.dataset.neural) settings.own[settings.lang] = item.dataset.neural;
+  else if (item.dataset.uri) settings.sysVoices[settings.lang] = item.dataset.uri;
   else settings.voice = item.dataset.voice;
   saveSettings();
   markVoice();
@@ -2808,10 +2815,15 @@ renderPlayer();
 renderChip();
 voice.load();
 const aiReady = ai.init();
-// Which voice speaks may wait on the server: Azure's, when it offers them, come before any the
-// page downloads. A downloaded voice chosen before needn't wait.
-if (neuralFor() && settings.own[settings.lang] === neuralFor().id) neural.load();
-aiReady.then(() => { buildVoiceMenu(); renderPlayer(); neural.load(); });
+// The voice downloads while the server is still being reached (it can take a minute to wake). Once
+// it has answered: if it can't write the voice's phonemes, the system's voice speaks instead.
+neural.load();
+aiReady.then(() => {
+  if (!neuralFor()) neural.release();
+  buildVoiceMenu();
+  renderPlayer();
+  neural.load();
+});
 
 const linked = new URLSearchParams(location.search).get('file');
 if (linked) openPdf(new URL(linked, location.href).href, decodeURIComponent(linked.split('/').pop()).replace(/\.pdf$/i, ''));

@@ -108,16 +108,57 @@ const pbInt = (field, v) => Uint8Array.from([...varint(field * 8), ...varint(v)]
 const pbBytes = (field, b) => cat(Uint8Array.from([...varint(field * 8 + 2), ...varint(b.length)]), b);
 const pbStr = (field, s) => pbBytes(field, utf8.encode(s));
 
+const FLOAT = 1, INT64 = 7; // ONNX element types
+const bytesOf = (a) => new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+const valueInfo = (name, dims, type = FLOAT) => cat(pbStr(1, name), pbBytes(2, pbBytes(1, cat(pbInt(1, type),
+  pbBytes(2, cat(...dims.map((d) => pbBytes(1, pbInt(1, d)))))))));
+const tensor = (name, dims, type, data) => cat(...dims.map((d) => pbInt(1, d)), pbInt(2, type), pbStr(8, name), pbBytes(9, bytesOf(data)));
+const node = (op, inputs, outputs, attrs = {}) => cat(...inputs.map((x) => pbStr(1, x)), ...outputs.map((x) => pbStr(2, x)), pbStr(4, op),
+  ...Object.entries(attrs).map(([k, v]) => pbBytes(5, cat(pbStr(1, k), pbInt(3, v), pbInt(20, 2))))); // int attributes
+
+/** The top-level fields of a protobuf message: [{ num, start, end }] over `buf`, `end` where the field's bytes end. */
+export function protoFields(buf) {
+  const out = [];
+  let p = 0;
+  const varint = () => { let r = 0, m = 1, x; do { x = buf[p++]; r += (x & 127) * m; m *= 128; } while (x & 128); return r; };
+  while (p < buf.length) {
+    const start = p, key = varint(), num = Math.floor(key / 8), wire = key % 8;
+    if (wire === 0) varint();
+    else if (wire === 2) { const len = varint(); out.push({ num, start, body: p, end: p + len }); p += len; continue; }
+    else if (wire === 5) p += 4;
+    else if (wire === 1) p += 8;
+    else throw new Error(`Unexpected protobuf wire type ${wire}.`);
+    out.push({ num, start, end: p });
+  }
+  return out;
+}
+
 /** An ONNX model computing y[1, rows] = x[1, cols] · Wᵀ, for `weights` W (rows × cols, row by row). → its bytes */
 export function gemmModel(rows, cols, weights) {
-  const shape = (dims) => pbBytes(2, cat(...dims.map((d) => pbBytes(1, pbInt(1, d)))));
-  const valueInfo = (name, dims) => cat(pbStr(1, name), pbBytes(2, pbBytes(1, cat(pbInt(1, 1), shape(dims))))); // float tensor
-  const w = cat(pbInt(1, rows), pbInt(1, cols), pbInt(2, 1), pbStr(8, 'w'),
-    pbBytes(9, new Uint8Array(weights.buffer, weights.byteOffset, weights.byteLength)));
-  const node = cat(pbStr(1, 'x'), pbStr(1, 'w'), pbStr(2, 'y'), pbStr(4, 'Gemm'),
-    pbBytes(5, cat(pbStr(1, 'transB'), pbInt(3, 1), pbInt(20, 2)))); // transB = 1 (an int attribute)
-  const graph = cat(pbBytes(1, node), pbStr(2, 'head'), pbBytes(5, w), pbBytes(11, valueInfo('x', [1, cols])), pbBytes(12, valueInfo('y', [1, rows])));
+  const graph = cat(pbBytes(1, node('Gemm', ['x', 'w'], ['y'], { transB: 1 })), pbStr(2, 'head'),
+    pbBytes(5, tensor('w', [rows, cols], FLOAT, weights)), pbBytes(11, valueInfo('x', [1, cols])), pbBytes(12, valueInfo('y', [1, rows])));
   return cat(pbInt(1, 8), pbBytes(8, cat(pbStr(1, ''), pbInt(2, 17))), pbBytes(7, graph)); // IR version 8, opset 17
+}
+
+/**
+ * The acoustic transformer's ONNX model with the scores for a codebook's codes added on, so a
+ * code is one call rather than two: an input `codebook` (an int64 scalar) and an output
+ * `logits`[1, rows], the last position of `hidden` against `weights` (books × rows × cols)
+ * for that codebook. → the new model's bytes
+ */
+export function withHead(model, books, rows, cols, weights) {
+  const parts = protoFields(model), graph = parts.find((f) => f.num === 7);
+  const added = cat(
+    pbBytes(1, node('Gather', ['hidden', 'head_last_index'], ['head_last'], { axis: 1 })),
+    pbBytes(1, node('Gather', ['head_weights', 'codebook'], ['head_book'], { axis: 0 })),
+    pbBytes(1, node('Gemm', ['head_last', 'head_book'], ['logits'], { transB: 1 })),
+    pbBytes(5, tensor('head_last_index', [], INT64, BigInt64Array.from([-1n]))),
+    pbBytes(5, tensor('head_weights', [books, rows, cols], FLOAT, weights)),
+    pbBytes(11, valueInfo('codebook', [], INT64)),
+    pbBytes(12, valueInfo('logits', [1, rows])),
+  );
+  const rest = parts.filter((f) => f !== graph).map((f) => model.subarray(f.start, f.end));
+  return cat(...rest, pbBytes(7, cat(model.subarray(graph.body, graph.end), added)));
 }
 
 // ── How long a piece may run ────────────────────────────────────────────────

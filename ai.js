@@ -3,7 +3,7 @@
 // Answers about a document's pages are also kept in this browser (cache.js), and asked for
 // only when they aren't there.
 
-import { shelf, hashKey, fingerprint, keptSound } from './cache.js';
+import { shelf, hashKey, fingerprint } from './cache.js';
 
 // Where that server is when this page is opened from somewhere that only hosts the page itself
 // (GitHub Pages, or an editor's live preview). The server has to allow that site in
@@ -13,6 +13,7 @@ const FORCE_HOSTED = new URLSearchParams(location.search).get('backend') === 're
 const ON_THIS_MACHINE = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
 let base = ''; // '' while the server that sent this page is also the one that answers /api
 const phonemesOf = new Map(); // text → its phonemes, oldest first
+const phonemesDue = new Map(); // text → the request bringing its phonemes
 
 const MESSAGES = {
   no_sdk: 'Claude is off: start the reader with “uv run serve.py”.',
@@ -80,8 +81,8 @@ export const ai = {
   reason: 'no_sdk', // why not, when unavailable: no_sdk | no_key | elsewhere | waking | unreachable
   model: '',
   cacheVersion: '', // the server's prompt version: answers kept in the browser under another are not used
-  speech: [], // the names of Azure's voices the server can speak with, if it has been set up for them
-  phonemes: false, // whether the server writes phonemes for the VieNeu Turbo voices
+  checked: false, // whether the server has said what it can do (or turned out not to be there)
+  phonemes: false, // whether it writes phonemes for the VieNeu Turbo voices
   /** The open document as Claude knows it: { state, id, notes, error, ready } */
   doc: null,
   onChange: () => {},
@@ -99,31 +100,27 @@ export const ai = {
     }
     Object.assign(this, {
       available: !!s.available, reason: s.reason || null, model: s.model || '', cacheVersion: s.cache || '0',
-      speech: Array.isArray(s.speech) ? s.speech : [], phonemes: !!s.phonemes,
+      phonemes: !!s.phonemes, checked: true,
     });
     this.onChange();
   },
 
-  /** Vietnamese texts as the phonemes the VieNeu Turbo voices read, written by the server. Kept for the session. */
-  async phonemize(texts) {
-    const asking = [...new Set(texts.filter((t) => !phonemesOf.has(t)))];
-    if (asking.length) {
-      const { phonemes } = await postJson('/api/phonemize', { texts: asking }, { timeout: 30000 });
-      asking.forEach((t, i) => phonemesOf.set(t, phonemes[i]));
-      for (const old of phonemesOf.keys()) { if (phonemesOf.size <= 4000) break; phonemesOf.delete(old); }
-    }
-    return texts.map((t) => phonemesOf.get(t));
-  },
-
   /**
-   * One sentence said by one of Azure's voices, `rate` times its usual pace. → its audio (MP3).
-   * Kept in this browser, so a sentence heard before is never asked for again.
+   * Vietnamese texts as the phonemes the VieNeu Turbo voices read, written by the server, 64 at
+   * a time. Kept for the session; a text already on its way is waited for, not asked for again.
    */
-  speak({ voice, text, rate = 1, signal }) {
-    return keptSound(hashKey(JSON.stringify([voice, rate, text])), async () => {
-      const { res, done } = await post('/api/speak', { voice, text, rate }, { signal, timeout: 30000 });
-      try { return await res.arrayBuffer(); } finally { done(); }
-    });
+  async phonemize(texts) {
+    const asking = [...new Set(texts.filter((t) => !phonemesOf.has(t) && !phonemesDue.has(t)))];
+    for (let i = 0; i < asking.length; i += 64) {
+      const some = asking.slice(i, i + 64);
+      const batch = postJson('/api/phonemize', { texts: some }, { timeout: 30000 }).then(({ phonemes }) => {
+        some.forEach((t, j) => phonemesOf.set(t, phonemes[j]));
+        for (const old of phonemesOf.keys()) { if (phonemesOf.size <= 4000) break; phonemesOf.delete(old); }
+      }).finally(() => some.forEach((t) => phonemesDue.delete(t)));
+      some.forEach((t) => phonemesDue.set(t, batch));
+    }
+    await Promise.all(new Set(texts.map((t) => phonemesDue.get(t)).filter(Boolean)));
+    return texts.map((t) => phonemesOf.get(t));
   },
 
   /** Why Claude can't be used, in words for the reader. */

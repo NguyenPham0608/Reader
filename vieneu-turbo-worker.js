@@ -10,8 +10,8 @@
 // sampling settings, its cap on how long a piece may run and its guard against short pieces
 // that say more than they were given.
 
-import * as ort from './vendor/piper/ort.wasm.bundle.min.mjs';
-import { makeTokenizer, readNpz, syllableCount, maxFrames, gemmModel } from './vieneu-turbo-lib.js';
+import * as ort from './vendor/onnxruntime/ort.wasm.bundle.min.mjs';
+import { makeTokenizer, readNpz, syllableCount, maxFrames, withHead } from './vieneu-turbo-lib.js';
 
 const RATE = 48000;               // the codec's: a frame is 3840 samples, 80 ms
 const TEMPERATURE = 0.8;
@@ -20,15 +20,14 @@ const TOP_P = 0.95;
 const REP_PENALTY = 1.2;          // codes picked in the last REP_WINDOW frames are made less likely, which breaks loops
 const REP_WINDOW = 64;
 const BABBLE_RETRIES = 2;
-const FIRST_FRAMES = 4;           // streaming: frames made before the first are decoded, then NEXT_FRAMES at a time
+const FIRST_FRAMES = 3;           // streaming: frames decoded at a time until speech goes out, then NEXT_FRAMES at a time
 const NEXT_FRAMES = 8;
 const STREAM_BELOW = 0.75;        // streaming only while this machine makes a second of speech in less than this
 const QUIET = 0.015;              // below this, a sample is the silence around speech
 const KEEP = Math.round(RATE * 0.06);   // of that silence, kept before and after speech
-const HOLD = Math.round(RATE * 0.3);    // streaming: held back, since it may be the silence at the end
 
 const voices = new Map();
-let cfg, encode, sessions, heads, codecState, textEmb, audioEmb, audioRows, H, L, nVq, nHeadsLoc, headDimLoc, layersLoc;
+let cfg, encode, sessions, codecState, textEmb, audioEmb, audioRows, H, L, nVq, nHeadsLoc, headDimLoc, layersLoc;
 let pace = 0;                     // seconds of work the last piece took per second of its speech
 const cancelled = new Set();
 let queue = Promise.resolve();
@@ -82,14 +81,11 @@ async function init(m) {
   sessions = {
     prefill: await ort.InferenceSession.create(m.models.prefill, opts('vieneu_backbone_shared.data', m.models.backbone)),
     step: await ort.InferenceSession.create(m.models.step, opts('vieneu_backbone_shared.data', m.models.backbone)),
-    acoustic: await ort.InferenceSession.create(m.models.acoustic, opts()),
+    // With each codebook's scores for its codes added on (its output against that codebook's
+    // embeddings), so that picking a code is one call.
+    acoustic: await ort.InferenceSession.create(withHead(m.models.acoustic, nVq, audioRows, H, audioEmb), opts()),
     codec: await ort.InferenceSession.create(m.models.codec, opts('moss_audio_tokenizer_decode_shared.data', m.models.codecData)),
   };
-  // Each codebook's scores for its codes: the acoustic transformer's output against that codebook's embeddings.
-  heads = [];
-  for (let ch = 0; ch < nVq; ch++) {
-    heads.push(await ort.InferenceSession.create(gemmModel(audioRows, H, audioEmb.subarray(ch * audioRows * H, (ch + 1) * audioRows * H)), opts()));
-  }
   codecState = m.codecMeta.streaming_decode;
   m.models = null; // the sessions have their own copies
   // The first run of anything is slow: have it now, while the voice is loading, not on the first sentence.
@@ -126,9 +122,8 @@ class History {
   }
 }
 
-/** Pick codebook `ch`'s code from the acoustic transformer's output `vec`. */
-async function sample(ch, vec, history) {
-  const logits = (await heads[ch].run({ x: f32(vec, [1, H]) })).y.data;
+/** Pick codebook `ch`'s code from its scores for each code (`logits`, changed here). */
+function sample(ch, logits, history) {
   for (const code of history.counts[ch].keys()) {
     const l = logits[code];
     logits[code] = l < 0 ? l * REP_PENALTY : l / REP_PENALTY;
@@ -161,18 +156,18 @@ async function frame(h, history) {
   const first = new Float32Array(2 * H);
   first.set(h, 0);
   first.set(textEmb.subarray(sgs * H, (sgs + 1) * H), H);
-  const feed = { token_emb: f32(first, [1, 2, H]), position_ids: i64([0, 1], [1, 2]) };
+  const feed = { token_emb: f32(first, [1, 2, H]), position_ids: i64([0, 1], [1, 2]), codebook: i64([0], []) };
   for (let i = 0; i < layersLoc; i++) { feed[`past_k_${i}`] = empty; feed[`past_v_${i}`] = empty; }
   let out = await sessions.acoustic.run(feed);
   const slot0 = out.hidden.data.slice(0, H);
   const codes = new Int32Array(nVq);
-  codes[0] = await sample(0, out.hidden.data.slice(H, 2 * H), history);
+  codes[0] = sample(0, out.logits.data, history);
   for (let ch = 1; ch < nVq; ch++) {
     const row = ((ch - 1) * audioRows + codes[ch - 1]) * H;
-    const next = { token_emb: f32(audioEmb.slice(row, row + H), [1, 1, H]), position_ids: i64([ch + 1], [1, 1]) };
+    const next = { token_emb: f32(audioEmb.slice(row, row + H), [1, 1, H]), position_ids: i64([ch + 1], [1, 1]), codebook: i64([ch], []) };
     for (let i = 0; i < layersLoc; i++) { next[`past_k_${i}`] = out[`present_k_${i}`]; next[`past_v_${i}`] = out[`present_v_${i}`]; }
     out = await sessions.acoustic.run(next);
-    codes[ch] = await sample(ch, out.hidden.data.slice(0, H), history);
+    codes[ch] = sample(ch, out.logits.data, history);
   }
   // Whether the speech is over: the text head's choice for the first slot.
   let best = -Infinity, bestId = -1;
@@ -186,9 +181,9 @@ async function frame(h, history) {
 
 /**
  * The frames of speech for one piece's phonemes in one voice, at most `cap` of them, handed to
- * `onFrames` in groups as they are made (when given). → [Int32Array(16)]
+ * `onFrames` in groups of `group()` as they are made (when given). → [Int32Array(16)]
  */
-async function generate(phonemes, voice, cap, id, onFrames = null) {
+async function generate(phonemes, voice, cap, id, onFrames = null, group = () => NEXT_FRAMES) {
   const ids = [cfg.default_style_token_id ?? 16, cfg.text_prompt_start_token_id, ...encode(phonemes), cfg.text_prompt_end_token_id];
   const T = ids.length + voice.codes.length;
   const prompt = new Float32Array(T * H);
@@ -204,7 +199,7 @@ async function generate(phonemes, voice, cap, id, onFrames = null) {
     const { codes, end } = await frame(h, history);
     frames.push(codes);
     if (end) break;
-    if (onFrames && frames.length - handed >= (handed ? NEXT_FRAMES : FIRST_FRAMES)) {
+    if (onFrames && frames.length - handed >= group()) {
       await onFrames(frames.slice(handed));
       handed = frames.length;
     }
@@ -312,13 +307,15 @@ function trim(wav) {
 }
 
 /**
- * Speech passed on (`post`) as it is decoded, trimmed as `trim` trims a whole piece: nothing
- * until it starts, and the last moments held back until it is known whether they are the end.
- * The first part waits until it lasts long enough (`lead` seconds) to play while the next is made.
+ * Speech passed on (`post`) as it is decoded, trimmed as `trim` trims a whole piece: nothing until
+ * it starts, and the quiet at the end of what has come held back until it is known whether
+ * speech goes on after it. The first part waits until it lasts long enough (`lead` seconds) to
+ * play while the next is made.
  */
 function streamer(post, lead) {
-  let held = new Float32Array(0), started = false, posted = false;
-  return {
+  let held = new Float32Array(0), started = false;
+  const out = {
+    posted: false,
     push(wav) {
       let x = new Float32Array(held.length + wav.length);
       x.set(held);
@@ -329,17 +326,21 @@ function streamer(post, lead) {
         x = fade(x.slice(Math.max(0, a - KEEP)), true, false);
         started = true;
       }
-      const ready = x.length - HOLD;
-      if (ready > 0 && (posted || ready >= lead * RATE)) {
-        post(clip(x.slice(0, ready)));
-        held = x.slice(ready);
-        posted = true;
+      const b = lastLoud(x);
+      const upto = b < 0 ? 0 : Math.min(x.length, b + 1 + KEEP); // up to the breath after the last sound
+      if (upto > 0 && (out.posted || upto >= lead * RATE)) {
+        post(clip(x.slice(0, upto)));
+        held = x.slice(upto);
+        out.posted = true;
       } else held = x;
     },
     end() {
-      if (started) post(fade(clip(held.slice(0, Math.min(held.length, lastLoud(held) + 1 + KEEP))), false, true));
+      if (!started) return;
+      const b = lastLoud(held);
+      if (b >= 0 || !out.posted) post(fade(clip(held.slice(0, Math.min(held.length, b + 1 + KEEP))), false, true));
     },
   };
+  return out;
 }
 
 /**
@@ -353,7 +354,8 @@ async function synthOne(phonemes, voice, id, post = null) {
   if (post && syllableCount(phonemes) > 3 && pace < STREAM_BELOW) {
     // Enough to cover making the next group of frames, with room to spare (a first piece guesses this machine's pace).
     const out = streamer(post, Math.max(0.35, 1.3 * NEXT_FRAMES * 0.08 * (pace || 0.5) + 0.1));
-    const frames = await generate(phonemes, voice, cap, id, async (some) => out.push(await decode(some)));
+    const frames = await generate(phonemes, voice, cap, id, async (some) => out.push(await decode(some)),
+      () => (out.posted ? NEXT_FRAMES : FIRST_FRAMES));
     out.end();
     took(frames.length);
     return null;

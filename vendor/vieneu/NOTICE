@@ -1,8 +1,0 @@
-voices.json
-  The preset voices of VieNeu-TTS v3 Nano (speaker embeddings and style tokens, from the vieneu
-  Python package's voices_v3_nano.json) and the model's "no voice" constants (from constants.npz
-  in the model repository), rounded to five decimals. Apache License 2.0,
-  by Phạm Nguyễn Ngọc Bảo. https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Nano
-
-The model itself is not kept here: neural.js fetches it from that repository when a voice is
-first used.
