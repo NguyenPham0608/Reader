@@ -133,3 +133,12 @@ test('the code scores are added onto the acoustic model as one more input, outpu
   assert.deepEqual(names(g, 12), ['y', 'logits']);
   assert.equal(protoFields(g).filter((f) => f.num === 5).length, 3); // the base's weights, the index, the codebooks' weights
 });
+
+test('abbreviations are marked to be said in English, letter by letter or as the word', async () => {
+  const { englishAbbreviations: f } = await import('../vieneu-turbo-lib.js');
+  assert.equal(f('Thuật toán DMRG chạy trên GPU.'), 'Thuật toán <en>d m r g</en> chạy trên <en>g p u</en>.');
+  assert.equal(f('Phân tử mRNA và cơ quan NASA.'), 'Phân tử <en>m r n a</en> và cơ quan <en>nasa</en>.');
+  assert.equal(f('Phần II và IV.'), 'Phần II và IV.'); // numerals
+  assert.equal(f('PHẦN HAI: KẾT QUẢ'), 'PHẦN HAI: KẾT QUẢ'); // a heading in capitals
+  assert.equal(f('Một DVD và LCD.'), 'Một <en>d v d</en> và <en>l c d</en>.');
+});

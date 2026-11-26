@@ -9,21 +9,21 @@
 
 import { fetchBytes } from './vendor/phonon/fetch.js';
 import { ai } from './ai.js';
-import { turboPieces } from './vieneu-turbo-lib.js';
+import { turboPieces, englishAbbreviations } from './vieneu-turbo-lib.js';
 
 const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm'; // must match vendor/onnxruntime/ort.wasm.bundle.min.mjs
 // Pinned: vendor/vieneu-turbo/voices.json came with this revision, and the voices only fit the model they came with.
 const VIENEU_TURBO = 'https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo/resolve/61b85e3d937fbbacb387714180e8182823512523/onnx_update/';
 const MOSS_CODEC = 'https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae/';
 
-const turbo = (voice, tags) => ({
-  id: `turbo-${voice}`, engine: 'turbo', voice, name: voice, tags, megabytes: 530, lang: 'vi', tag: 'vi-VN',
+const turbo = (voice, tags, name = voice) => ({
+  id: `turbo-${voice}`, engine: 'turbo', voice, name, tags, megabytes: 530, lang: 'vi', tag: 'vi-VN',
   about: 'VieNeu-TTS v3 Turbo, made for Vietnamese and at ease with English words (Apache-2.0).',
 });
 
 /** The voices, by language, the default first. `tag` is what Claude translates into; `megabytes` the first download, which they share. */
 export const NEURAL_VOICES = {
-  vi: [turbo('Trúc Ly', 'Female · Northern'), turbo('Hải Đăng', 'Male · Northern')],
+  vi: [turbo('Trúc Ly', 'Female · Northern'), turbo('Adam', 'Male · Southern')],
 };
 
 // The model takes about a gigabyte of memory while it runs: more than a phone can spare.
@@ -40,7 +40,7 @@ export const loadNeural = (spec, options) => TurboVoice.load(spec, options);
 
 /** Have the phonemes of sentences about to be read written now, so that saying them needn't wait for the server. */
 export function phonemesAhead(texts) {
-  if (ai.phonemes && texts.length) ai.phonemize(texts.flatMap((t) => turboPieces(t))).catch(() => {});
+  if (ai.phonemes && texts.length) ai.phonemize(texts.flatMap((t) => turboPieces(t)).map(englishAbbreviations)).catch(() => {});
 }
 
 const json = (bytes) => JSON.parse(new TextDecoder().decode(bytes));
@@ -92,7 +92,7 @@ class TurboVoice {
    * → Float32Array at `sampleRate`
    */
   async synth(text, spec, { signal, onPart = null } = {}) {
-    const phonemes = await ai.phonemize(turboPieces(text));
+    const phonemes = await ai.phonemize(turboPieces(text).map(englishAbbreviations)); // abbreviations said in English
     if (signal?.aborted) throw signal.reason;
     return this.request({ type: 'synth', phonemes, voice: spec.voice, stream: !!onPart }, signal, onPart);
   }

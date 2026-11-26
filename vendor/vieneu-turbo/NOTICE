@@ -1,5 +1,5 @@
 voices.json
-  Two preset voices of VieNeu-TTS v3 Turbo, Trúc Ly (female) and Hải Đăng (male): their speaker
+  Two preset voices of VieNeu-TTS v3 Turbo, Trúc Ly (female) and Adam (male): their speaker
   embeddings and reference codes, from the vieneu Python package's voices_v3_turbo.json, with the
   codec's padding frame dropped from the end of the codes as that package does. Apache License
   2.0, by Phạm Nguyễn Ngọc Bảo. https://github.com/pnnbao97/VieNeu-TTS

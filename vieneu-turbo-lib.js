@@ -211,3 +211,21 @@ export function turboPieces(text, max = 240) {
   if (rest) out.push(rest);
   return out;
 }
+
+// Abbreviations in capitals are said the English way: sea-g2p reads text marked <en>…</en> as
+// English, so they are marked, spelt as letters ("DMRG" → "<en>d m r g</en>", "dee em ar gee"),
+// or for the few said as words, as the word ("<en>nasa</en>").
+const SAID_AS_WORDS = new Set(['NASA', 'NATO', 'UNESCO', 'UNICEF', 'COVID', 'AIDS', 'SARS', 'LASER', 'RADAR', 'SONAR', 'LIDAR',
+  'ASEAN', 'OPEC', 'FIFA', 'RAM', 'ROM', 'LAN', 'WAN', 'SIM', 'PIN', 'GIF', 'JPEG', 'ASCII', 'BASIC', 'COBOL', 'FORTRAN', 'SCUBA']);
+const ROMAN = /^(?:I{2,3}|IV|VI{0,3}|IX|XI{0,3}|X{2,3}|XI?V|XIX)$/; // a numeral (II, IV, XII), not an abbreviation
+
+/** A sentence with its abbreviations marked to be said in English (see above). */
+export function englishAbbreviations(text) {
+  // A heading set in capitals has Vietnamese words in capitals too, with their marks (PHẦN, KẾT), which no abbreviation has.
+  if ((text.match(/[\p{L}]+/gu) || []).some((w) => w.length > 1 && w === w.toUpperCase() && /[^\x00-\x7F]/.test(w))) return text;
+  return text.replace(/(?<![\p{L}\p{N}])[a-z]?[A-Z]{2,8}(?![\p{L}\p{N}])/gu, (m) => {
+    if (ROMAN.test(m)) return m;
+    if (SAID_AS_WORDS.has(m)) return `<en>${m.toLowerCase()}</en>`;
+    return `<en>${[...m.toLowerCase()].join(' ')}</en>`;
+  });
+}

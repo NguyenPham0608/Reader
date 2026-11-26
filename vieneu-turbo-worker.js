@@ -22,15 +22,21 @@ const REP_WINDOW = 64;
 const BABBLE_RETRIES = 2;
 const FIRST_FRAMES = 3;           // streaming: frames decoded at a time until speech goes out, then NEXT_FRAMES at a time
 const NEXT_FRAMES = 8;
-const STREAM_BELOW = 0.75;        // streaming only while this machine makes a second of speech in less than this
+const STREAM_BELOW = 0.95;        // streaming only while this machine makes a second of speech in less than this
 const QUIET = 0.015;              // below this, a sample is the silence around speech
 const KEEP = Math.round(RATE * 0.06);   // of that silence, kept before and after speech
 
 const voices = new Map();
 let cfg, encode, sessions, codecState, textEmb, audioEmb, audioRows, H, L, nVq, nHeadsLoc, headDimLoc, layersLoc;
-let pace = 0;                     // seconds of work the last piece took per second of its speech
+let pace = 0;                     // seconds of work per second of speech, lately (0 until known)
 const cancelled = new Set();
 let queue = Promise.resolve();
+
+// ONNX Runtime's runs finish without a break in which a message could come in, so a cancel would
+// wait for the whole piece: between frames the worker stops a moment to read its messages.
+const nudge = new MessageChannel(), woken = [];
+nudge.port1.onmessage = () => woken.shift()?.();
+const breathe = () => new Promise((resolve) => { woken.push(resolve); nudge.port2.postMessage(0); });
 
 const f32 = (data, dims) => new ort.Tensor('float32', data, dims);
 const i32 = (data, dims) => new ort.Tensor('int32', data, dims);
@@ -91,6 +97,7 @@ async function init(m) {
   // The first run of anything is slow: have it now, while the voice is loading, not on the first sentence.
   const warm = 'tʃˈaː2w.'; // "chào."
   await decoder()(await generate(warm, voices.values().next().value, maxFrames(warm), -1));
+  pace = 0; // (not this machine's pace: the first run is the slow one)
 }
 
 // ── Making the codes ────────────────────────────────────────────────────────
@@ -195,6 +202,7 @@ async function generate(phonemes, voice, cap, id, onFrames = null, group = () =>
   const history = new History(), frames = [];
   let handed = 0;
   for (let t = 0; t < cap; t++) {
+    await breathe();
     if (cancelled.has(id)) return frames;
     const { codes, end } = await frame(h, history);
     frames.push(codes);
@@ -350,7 +358,13 @@ function streamer(post, lead) {
  */
 async function synthOne(phonemes, voice, id, post = null) {
   const cap = maxFrames(phonemes), t0 = performance.now(), decode = decoder();
-  const took = (frames) => { pace = (performance.now() - t0) / 1000 / Math.max(0.1, frames * 0.08); };
+  // This machine's pace, from pieces long enough to tell it and not cut short (a skip cancels the one under way).
+  // Averaged, so that one piece slowed by something else on the machine doesn't turn streaming off.
+  const took = (frames) => {
+    if (frames < 10 || cancelled.has(id)) return;
+    const now = (performance.now() - t0) / 1000 / (frames * 0.08);
+    pace = pace ? 0.7 * pace + 0.3 * now : now;
+  };
   if (post && syllableCount(phonemes) > 3 && pace < STREAM_BELOW) {
     // Enough to cover making the next group of frames, with room to spare (a first piece guesses this machine's pace).
     const out = streamer(post, Math.max(0.35, 1.3 * NEXT_FRAMES * 0.08 * (pace || 0.5) + 0.1));

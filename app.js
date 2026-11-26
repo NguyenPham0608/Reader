@@ -688,12 +688,18 @@ function inUse(p) {
     || s.segs.some((x) => x.block.page === p || x.chunk.join?.some((j) => j.block.page === p)));
 }
 
+/**
+ * Wait for Claude's work on a page that a reader is moving onto: all of it, or reading a
+ * translation, only its paragraphs, since the translation says the rest.
+ */
+const settled = (p) => (targetLang() ? narration.laidOut(p).catch(() => {}) : narration.request(p));
+
 async function adjacentBlock(block, dir) {
   let p = block.page, i = block.index + dir;
   while (p) {
     await ensureBlocks(p);
     // Claude may still be regrouping another page's paragraphs: let that finish before picking one of them.
-    if (p !== block.page && usingClaude()) await narration.request(p);
+    if (p !== block.page && usingClaude()) await settled(p);
     const blocks = p.blocks;
     if (i === -2) i = blocks.length - 1;
     for (; i >= 0 && i < blocks.length; i += dir) if (chunkBlock(blocks[i]).length) return blocks[i];
@@ -741,7 +747,7 @@ async function nextReadable(block, dir, minLength = 0) {
     if (!b) return null;
     if (b.text.length < minLength) continue;
     if (usingClaude()) {
-      await narration.request(b.page);
+      await settled(b.page);
       if (b.skip) continue;
     }
     return b;
@@ -1037,22 +1043,34 @@ const narration = {
     }
   },
 
+  /**
+   * Claude's paragraphs for a page, without the rest of its preparation: all that a translation of
+   * it needs. Resolves once they are in place (or kept for when the page is no longer being heard).
+   */
+  laidOut(p) {
+    if (!usingClaude()) return ensureBlocks(p);
+    return p.layoutDone ??= (async () => {
+      const token = view.token;
+      await ensureBlocks(p);
+      if (p.layout !== 'guess' || !p.lines.length) return;
+      const layout = await ai.layout(p.n, p.lines.map((ln) => ({
+        id: ln.id, x: Math.round(ln.x0), y: Math.round(ln.base), size: Math.round(ln.size * 10) / 10, text: ln.text.slice(0, 200),
+      }))).catch((e) => {
+        if (e.code !== 'not_found') throw e; // a server from before this existed: carry on with the guess
+        p.layout = 'unavailable';
+        return null;
+      });
+      if (token !== view.token) return;
+      // Paragraphs can't change under someone listening to them: keep Claude's for when they've moved on.
+      if (layout && inUse(p)) p.layoutPending = layout; else if (layout) applyLayout(p, layout);
+    })().catch((e) => { p.layoutDone = null; throw e; }); // to be asked again
+  },
+
   async prepare(p) {
     const token = view.token;
     try {
-      await ensureBlocks(p);
-      if (p.layout === 'guess' && p.lines.length) {
-        const layout = await ai.layout(p.n, p.lines.map((ln) => ({
-          id: ln.id, x: Math.round(ln.x0), y: Math.round(ln.base), size: Math.round(ln.size * 10) / 10, text: ln.text.slice(0, 200),
-        }))).catch((e) => {
-          if (e.code !== 'not_found') throw e; // a server from before this existed: carry on with the guess
-          p.layout = 'unavailable';
-          return null;
-        });
-        if (token !== view.token) return;
-        // Paragraphs can't change under someone listening to them: keep Claude's for when they've moved on.
-        if (layout && inUse(p)) p.layoutPending = layout; else if (layout) applyLayout(p, layout);
-      }
+      await this.laidOut(p);
+      if (token !== view.token) return;
       const blocks = p.blocks;
       const pieces = [];
       for (const b of blocks) {
@@ -1094,7 +1112,7 @@ const narration = {
  * says is kept in this browser, so a document opened again is in that language at once.
  */
 const AHEAD_PAGES = 60;   // pages translated in the background from the one being read: all of most papers
-const AHEAD_AT_ONCE = 2;  // pages translated at a time, leaving Claude room for the paragraph being read
+const AHEAD_AT_ONCE = 4;  // pages translated at a time
 const STOP_AHEAD = new Set(['limit', 'auth', 'no_key', 'no_sdk', 'too_long', 'too_large']); // errors that more pages would only repeat
 
 const translation = {
@@ -1250,7 +1268,7 @@ const translation = {
       const token = view.token, mine = p.tr;
       try {
         if (!(await startClaude())) throw ai.doc?.error || new AiError(ai.available ? 'api' : ai.reason);
-        await narration.request(p); // so the paragraphs are Claude's before they are translated
+        await narration.laidOut(p).catch(() => {}); // so the paragraphs are Claude's before they are translated (or else the guess)
         const blocks = await ensureBlocks(p);
         if (token !== view.token) return null;
         // Claude regrouped the page's paragraphs meanwhile, which set this request aside: translate the new ones.
@@ -1413,6 +1431,10 @@ const neural = {
   pct: 0,
   everReady: false,
   job: null,
+  // Sentences said lately, or got ready ahead of a skip: `${voice}|${text}` → Promise of the audio
+  // at the voice's own pace. Skipping back, or on to a paragraph got ready, then starts at once.
+  said: new Map(),
+  priming: new Set(), // the AbortControllers of sentences being got ready
 
   load(spec = neuralFor()) {
     if (!spec) return null;
@@ -1429,6 +1451,7 @@ const neural = {
         if (this.job !== job) { tts.dispose(); return; }
         this.tts?.dispose();
         this.tts = tts;
+        this.said.clear();
         this.state = 'ready';
         this.everReady = true;
         this.pct = 100;
@@ -1446,20 +1469,63 @@ const neural = {
   /** Let go of the voice (it can't be used here after all), and of any download of it still under way. */
   release() {
     this.tts?.dispose();
+    this.said.clear();
     Object.assign(this, { tts: null, job: null, spec: null, key: '', state: 'idle', pct: 0 });
   },
 
+  /** Keep a sentence's audio (a promise of it) among the last few. */
+  remember(key, audio) {
+    this.said.delete(key);
+    this.said.set(key, audio);
+    audio.catch(() => { if (this.said.get(key) === audio) this.said.delete(key); });
+    while (this.said.size > 16) this.said.delete(this.said.keys().next().value);
+  },
+
   /**
-   * Speak one piece of text in one of the loaded engine's voices, at the chosen speed. → { pcm, rate }
+   * Have a sentence ready ahead, so that skipping to it needn't wait for the voice. It gives way
+   * to anything that is to be heard (see `synth`), and is dropped then if not done.
+   */
+  prime(text, spec) {
+    const key = `${spec.id}|${text}`;
+    if (!text || this.state !== 'ready' || this.said.has(key)) return;
+    const stop = new AbortController();
+    this.priming.add(stop);
+    const job = this.tts.synth(text, spec, { signal: stop.signal });
+    job.finally(() => this.priming.delete(stop)).catch(() => {});
+    this.remember(key, job);
+  },
+
+  /**
+   * Speak one piece of text in one of the loaded engine's voices, at the chosen speed. → { pcm, rate, whole }
+   * `waiting`: someone is waiting to hear it (nothing much is queued before it), so sentences only
+   * being got ready ahead give way to it.
    * With `onPart`, an engine that can hands the audio over in parts as it is made (`onPart({ pcm,
    * rate })`), and what is returned is whatever didn't come that way. Only at the engine's own pace,
-   * since stretching to another works on a whole sentence.
+   * since stretching to another works on a whole sentence. `whole` is all of it, as it is heard.
    */
-  async synth(text, spec, signal, onPart = null) {
-    const tts = this.tts, stretch = settings.speed / tts.pace(settings.speed);
-    const live = onPart && tts.streams && Math.abs(stretch - 1) < 0.04 ? (pcm) => onPart({ pcm, rate: tts.sampleRate }) : null;
-    const pcm = await tts.synth(text, spec, { signal, speed: settings.speed, onPart: live });
-    return { pcm: timeStretch(pcm, stretch, tts.sampleRate), rate: tts.sampleRate };
+  async synth(text, spec, signal, onPart = null, waiting = true) {
+    const tts = this.tts, stretch = settings.speed / tts.pace(settings.speed), key = `${spec.id}|${text}`;
+    const kept = this.said.get(key);
+    if (kept) {
+      const pcm = await kept.catch(() => null);
+      if (signal?.aborted) throw signal.reason;
+      if (pcm) { const out = timeStretch(pcm, stretch, tts.sampleRate); return { pcm: out, rate: tts.sampleRate, whole: out }; }
+    }
+    if (waiting) for (const stop of this.priming) stop.abort(); // someone is waiting for this: what is only being got ready gives way
+    const parts = [];
+    const live = onPart && tts.streams && Math.abs(stretch - 1) < 0.04
+      ? (pcm) => { parts.push(pcm.slice()); onPart({ pcm, rate: tts.sampleRate }); } : null;
+    const rest = tts.synth(text, spec, { signal, speed: settings.speed, onPart: live });
+    // Kept whole, however it came: the parts handed over, then the rest.
+    const whole = rest.then((r) => {
+      const all = new Float32Array(parts.reduce((n, x) => n + x.length, 0) + r.length);
+      let at = 0;
+      for (const x of [...parts, r]) { all.set(x, at); at += x.length; }
+      return all;
+    });
+    this.remember(key, whole);
+    const pcm = timeStretch(await rest, stretch, tts.sampleRate);
+    return { pcm, rate: tts.sampleRate, whole: parts.length ? await whole : pcm };
   },
 };
 /** Whichever of the reader's own engines speaks now, or would for a session. */
@@ -1530,7 +1596,7 @@ const speaker = {
    * Begin a session on a block, either reading it ('read') or speaking Claude's reply to a turn
    * of the chat about it ('explain').
    */
-  start(block, mode, turn = null, from = null) {
+  start(block, mode, turn = null, from = null, now = false) {
     block = headOf(block); // a paragraph is read from its start, whichever part of it was picked
     this.halt();
     this.ensureCtx();
@@ -1547,8 +1613,9 @@ const speaker = {
       // A reply is a one-off: it never carries on to the next paragraph.
       busy: false, paused: false, extending: false, exhausted: !!turn, streaming: false, streamBlock: null,
       lastBlock: mode === 'explain' ? block : tailOf(block), waitPage: null, trWait: null,
-      // A double-click starts as a single click; holding audio back briefly lets it change its mind unheard.
-      notBefore: this.ctx.currentTime + 0.25,
+      // A double-click starts as a single click; holding audio back briefly lets it change its mind
+      // unheard. A skip (`now`) isn't a click on a paragraph, so needn't wait.
+      notBefore: this.ctx.currentTime + (now ? 0 : 0.25),
       synthAbort: new AbortController(), aiAbort: new AbortController(),
     };
     setActive(block, null, false, mode);
@@ -1563,6 +1630,7 @@ const speaker = {
       if (s.lang) {
         for (const b of partsOf(block)) translation.page(b.page, s.lang);
         translation.all(); // from here on, if it isn't under way already
+        if (s.neural) this.around(s);
       }
     }
     if (s.neural) neural.load(s.neural); else if (voice.state === 'error' && !s.sys) voice.load();
@@ -1635,7 +1703,7 @@ const speaker = {
     }
     if (here() !== from) return;
     if (!to) { toast(`No ${dir > 0 ? 'more' : 'earlier'} ${SCOPES.find((x) => x.id === scope).unit}s.`, 2200); return; }
-    this.start(to, 'read', null, sentence);
+    this.start(to, 'read', null, sentence, true);
     reveal(to);
   },
 
@@ -1714,6 +1782,12 @@ const speaker = {
     const s = this.session;
     if (!s || s.busy || (!s.sys && engineFor(s).state !== 'ready')) return;
     const ahead = s.sched.length ? s.nextTime - this.ctx.currentTime : 0;
+    // Skipping on or back should start at once: with a few seconds of this paragraph queued there is
+    // time to get the next paragraph's first sentence ready, ahead of the rest of this one; the
+    // previous paragraph's waits until all of this one is made.
+    const near = s.around;
+    if (near?.next && ahead > 4) { neural.prime(near.next, s.neural); near.next = null; }
+    if (near?.prev && s.next >= s.segs.length && !readsOn()) { neural.prime(near.prev, s.neural); near.prev = null; }
     if (s.next >= s.segs.length) {
       if (s.streaming || s.extending || s.exhausted || !readsOn()) return;
       if (ahead > BUFFER_AHEAD) return;
@@ -1770,17 +1844,18 @@ const speaker = {
     if (s.neural && s.lang) phonemesAhead(s.segs.slice(idx + 1, idx + 6).map((x) => voiced(s, x.chunk)).filter(Boolean));
     // Reading a translation, nothing waits on word timings (the words aren't the page's), so a voice
     // that can (VieNeu Turbo) is played as it is made: a sentence starts before it is finished.
-    let parts = 0;
+    let parts = 0, caption = null;
     const onPart = s.neural && s.lang ? ({ pcm, rate }) => {
       if (this.session !== s || s.id !== id || !pcm.length) return;
-      this.schedule(s, seg, pcm, rate, parts++ > 0);
+      const entry = this.schedule(s, seg, pcm, rate, parts++ > 0);
+      entry.caption = caption ??= captionOf(s, seg, entry.start); // the sentence's parts share it
     } : null;
-    (s.neural ? neural.synth(text, s.neural, signal, onPart) : voice.synth(text, settings.voice, signal)).then(
+    (s.neural ? neural.synth(text, s.neural, signal, onPart, ahead < 1.5) : voice.synth(text, settings.voice, signal)).then(
       (audio) => {
         if (this.session !== s || s.id !== id) return;
         s.busy = false;
-        if (parts && audio.pcm.length) this.schedule(s, seg, audio.pcm, audio.rate, true);
-        if (parts) { s.next = idx + 1; this.pump(); return; }
+        if (parts && audio.pcm.length) this.schedule(s, seg, audio.pcm, audio.rate, true).caption = caption;
+        if (parts) { timeCaption(caption, audio.whole, audio.rate); s.next = idx + 1; this.pump(); return; }
         this.onAudio(s, idx, audio);
       },
       (e) => {
@@ -1793,6 +1868,20 @@ const speaker = {
         this.pump();
       },
     );
+  },
+
+  /**
+   * What skipping on or back from this paragraph would say first: the first sentence of the
+   * paragraph on either side, where it is translated (`s.around`, for `pump` to get ready).
+   */
+  async around(s) {
+    const here = this.active ?? s.lastBlock, near = {};
+    for (const [dir, from] of [[1, tailOf(s.lastBlock)], [-1, headOf(here)]]) {
+      const b = await nextReadable(from, dir).catch(() => null);
+      const seg = b && this.session === s ? paragraphSegs(headOf(b))[0] : null;
+      near[dir > 0 ? 'next' : 'prev'] = seg ? voiced(s, seg.chunk) : ''; // nothing, until it is translated
+    }
+    if (this.session === s) { s.around = near; this.pump(); }
   },
 
   async extend(s) {
@@ -1837,13 +1926,17 @@ const speaker = {
     if (idx >= s.segs.length) return;
     const seg = s.segs[idx];
     s.next = idx + 1;
-    if (pcm.length) this.schedule(s, seg, pcm, rate);
+    if (pcm.length) {
+      const entry = this.schedule(s, seg, pcm, rate);
+      if (s.lang && !seg.chunk.explain) timeCaption(entry.caption = captionOf(s, seg, entry.start), pcm, rate);
+    }
     this.pump();
   },
 
   /**
    * Queue a sentence's audio to play after what is queued already: after its gap, and not before
    * it can be heard. `more`: the rest of a sentence that is playing in parts, which follows straight on.
+   * → its entry in `s.sched`
    */
   schedule(s, seg, pcm, rate, more = false) {
     const ctx = this.ctx;
@@ -1856,8 +1949,10 @@ const speaker = {
     src.start(start);
     const words = more || seg.chunk.start == null || s.lang ? [] : chunkWords(seg.block, seg.chunk); // translated words aren't the page's
     const times = words.length ? wordTimes(words.map((w) => w.part), pcm, rate) : null;
-    s.sched.push({ start, end: start + buf.duration, seg, src, times });
+    const entry = { start, end: start + buf.duration, seg, src, times };
+    s.sched.push(entry);
     s.nextTime = start + buf.duration;
+    return entry;
   },
 
   /** Runs every frame (a few times a second in a hidden tab): moves the highlight, tops up the buffer, notices the end. */
@@ -1880,6 +1975,7 @@ const speaker = {
       renderPlayer();
     }
     if (cur >= 0) wordMark.follow(s.sched[cur], t);
+    if (cur >= 0 && !els.caption.hidden) captionMark.follow(s.sched[cur], t);
     const drained = s.next >= s.segs.length && !s.busy && !s.streaming && !s.extending && (!readsOn() || s.exhausted);
     if (drained && (!s.sched.length || t > s.sched[s.sched.length - 1].end + 0.12)) { this.stop(s.mode === 'read' && settings.scope !== 'document'); return; } // with nothing coming next, the paragraph stays selected
     this.pump();
@@ -2144,6 +2240,58 @@ function wordTimes(parts, pcm, rate) {
   return times;
 }
 
+/**
+ * What the sentence box shows of a sentence said in translation: its words as they are said, and
+ * when each starts, in seconds after `start` (when its first sound plays). Until the voice has
+ * made all of it, the times are a guess at the pace the voice has been keeping.
+ */
+function captionOf(s, seg, start) {
+  const words = voiced(s, seg.chunk).split(/\s+/).filter(Boolean);
+  let at = 0;
+  const times = words.map((w) => { const t = at; at += wordWeight(w) * captionPace; return t; });
+  return { words, times, start };
+}
+let captionPace = 0.035; // seconds per unit of `wordWeight`, from the sentences said lately
+
+/** Time a caption's words from its sentence's audio, now that all of it is made. */
+function timeCaption(caption, pcm, rate) {
+  if (!caption || !pcm?.length) return;
+  try {
+    caption.times = wordTimes(caption.words, pcm, rate);
+    const weight = caption.words.reduce((sum, w) => sum + wordWeight(w), 0);
+    if (weight) captionPace = 0.7 * captionPace + 0.3 * (pcm.length / rate / weight);
+  } catch (e) {
+    console.warn('Could not time the sentence box', e); // the guess stays
+  }
+}
+
+/** The word being said, marked in the sentence box. */
+const captionMark = {
+  caption: null,
+  spans: [],
+  at: -1,
+
+  show(caption) {
+    if (caption === this.caption) return;
+    this.caption = caption;
+    this.at = -1;
+    this.spans = caption.words.map((w) => Object.assign(document.createElement('span'), { textContent: w }));
+    els.captionText.replaceChildren(...this.spans.flatMap((span, i) => (i ? [' ', span] : [span])));
+  },
+
+  follow(entry, t) {
+    const c = entry.caption;
+    if (!c || c !== this.caption || !c.times.length) return;
+    const at = t + WORD_LEAD - c.start;
+    let i = c.times.length - 1;
+    while (i > 0 && c.times[i] > at) i--;
+    if (i === this.at) return;
+    this.spans[this.at]?.classList.remove('now');
+    this.spans[i]?.classList.add('now');
+    this.at = i;
+  },
+};
+
 /** The stronger highlight: a small box on the word being spoken, moving through the paragraph. */
 const wordMark = {
   el: Object.assign(document.createElement('div'), { className: 'word' }),
@@ -2354,8 +2502,8 @@ function renderPlayer() {
   const said = settings.captions && s?.mode === 'read' && s.lang && s.cur >= 0 ? s.sched[s.cur].seg : null;
   els.caption.hidden = !said;
   if (said) {
-    const words = spoken(said.chunk);
-    if (els.captionText.textContent !== words) els.captionText.textContent = words;
+    const entry = s.sched[s.cur]; // (said by the system's voice, it has no timing: the words, unmarked)
+    captionMark.show(entry.caption ??= { words: spoken(said.chunk).split(/\s+/).filter(Boolean), times: [] });
     els.captionText.lang = s.lang;
     els.captionLang.textContent = languageName(s.lang);
   }
