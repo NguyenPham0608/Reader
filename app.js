@@ -1,6 +1,7 @@
 import * as pdfjs from './vendor/pdfjs/pdf.min.mjs';
-import { PhononTTS } from './vendor/phonon/index.js';
+import { PhononTTS, concatPcm } from './vendor/phonon/index.js';
 import { NEURAL_VOICES, engineKey, loadNeural, usableVoice, phonemesAhead } from './neural.js';
+import { turboPieces } from './vieneu-turbo-lib.js';
 import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
 import { speakable } from './speakable.js';
@@ -354,7 +355,13 @@ function cleanForSpeech(s) {
     .trim();
 }
 
-const MAX_CHUNK = 280;
+// A sentence is said whole, however long. Only text that runs on far past any sentence (a list or
+// a table set as one line) is cut, at a clause.
+const MAX_CHUNK = 1000;
+// Sentence-ending words that also end abbreviations: followed by a word that starts sentences, the
+// full stop ends one ("… by Smith et al. We found …", "… vitamin C. The …").
+const ENDS_TOO = /(?:\bet al|\betc|\b\p{Lu})\.\s*$/u;
+const STARTS = /^\s*["'“‘(\[]*(?:The|This|These|Those|That|We|Our|In|It|Its|Here|However|Thus|Hence|Therefore|Moreover|Furthermore|Finally|Also|Indeed|Overall|Instead|Similarly|Consequently|A|An|As|For|To|Such|They|There|On|At|By|From|With|When|While|Although|Since|Because|Each|All|Both|If|Then|Next|First|Second|Note|Table|Figure|Using|After|Before|Unlike|Despite|Most|Many|Some|Only|One|No)\b/u;
 const ABBREV = /(?:\b(?:et al|e\.g|i\.e|vs|cf|Figs?|Eqs?|Secs?|Refs?|Dr|Mrs?|Ms|Prof|St|Jr|Sr|approx|ca|pp?|Vol|Ch)|\b\p{Lu})\.\s*$/u;
 const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'sentence' }) : null;
 
@@ -390,6 +397,7 @@ function unclosed(text) {
 
 /** Whether the break between two pieces the segmenter cut apart is not the end of a sentence. `ahead` is the text from the break on. */
 function falseStop(before, after, ahead) {
+  if (ENDS_TOO.test(before) && STARTS.test(after)) return false;
   return ABBREV.test(before)                                    // "see Fig. | 2", "Smith et al. | 2020"
     || (/\bNo\.\s*$/.test(before) && /^\s*\d/.test(after))        // "No. | 5", but "No. | Maybe so."
     || (unclosed(before) > 0 && /[)\]]/.test(ahead))               // a full stop inside brackets: "(p. | 5)"
@@ -397,19 +405,22 @@ function falseStop(before, after, ahead) {
     || /^[\s"'“‘(\[]*\p{Ll}+(?![\p{Lu}\p{N}\p{Ll}])/u.test(after); // carries on in lower case: "approx. | five" (but not "mRNA")
 }
 
-/** Split a block into its sentences, the pieces the voice speaks one after another; a very long one is cut at a clause. */
+/** Split a block into its sentences, the pieces the voice speaks one after another, each from its start to its end. */
 function chunkBlock(block) {
   if (block.chunks) return block.chunks;
   const t = block.text;
   const parts = [];
   if (segmenter) {
     for (const s of segmenter.segment(t)) {
-      // It takes a lower-case letter to mean the sentence carries on, which "mRNA" and "pH" get past.
-      let from = 0;
-      for (const m of s.segment.matchAll(/[.!?]["'”’)\]]*\s+(?=\p{Ll}{1,2}\p{Lu})/gu)) {
-        parts.push([s.index + from, s.index + m.index + m[0].length]);
-        from = m.index + m[0].length;
+      // Ends the segmenter misses: before a word like "mRNA" or "pH" (it takes a lower-case letter
+      // to mean the sentence carries on), where the text lost the space after a full stop
+      // ("end.The"), and after a reference number set against the full stop ("shown.12 The").
+      const cuts = new Set();
+      for (const re of [/[.!?]["'”’)\]]*\s+(?=\p{Ll}{1,2}\p{Lu})/gu, /(?<=\p{Ll}{2}[.!?]["'”’)\]]*)(?=\p{Lu}\p{Ll})/gu, /(?<=\p{Ll}{2}[.!?]\d{1,3}(?:[,–-]\d{1,3})*)\s+(?=\p{Lu})/gu]) {
+        for (const m of s.segment.matchAll(re)) cuts.add(m.index + m[0].length);
       }
+      let from = 0;
+      for (const at of [...cuts].sort((a, b) => a - b)) { if (at > from) parts.push([s.index + from, s.index + at]); from = at; }
       parts.push([s.index + from, s.index + s.segment.length]);
     }
   } else {
@@ -421,7 +432,7 @@ function chunkBlock(block) {
   const merged = [];
   for (const p of parts) {
     const last = merged[merged.length - 1];
-    if (last && falseStop(t.slice(last[0], last[1]), t.slice(p[0], p[1]), t.slice(p[0], p[0] + MAX_CHUNK))) last[1] = p[1];
+    if (last && falseStop(t.slice(last[0], last[1]), t.slice(p[0], p[1]), t.slice(p[0], p[0] + 280))) last[1] = p[1];
     else merged.push([p[0], p[1]]);
   }
   const ranges = [];
@@ -766,10 +777,54 @@ function firstVisibleBlock() {
   return null;
 }
 
-function reveal(block) {
-  const r = block.el.getBoundingClientRect();
-  if (r.top < 64 || r.bottom > innerHeight - 130) block.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+function reveal(block) { follow(block, null, true); }
+
+// ── Keeping the reading in view ─────────────────────────────────────────────
+
+let handScrolled = -Infinity; // when the reader last scrolled the page themselves
+for (const type of ['wheel', 'touchmove']) addEventListener(type, () => { handScrolled = performance.now(); }, { passive: true });
+
+/** The part of the window text can be read in: below the top bar, above the sentence box. */
+function readingBand() {
+  const box = els.caption.hidden ? 0 : innerHeight - els.caption.getBoundingClientRect().top;
+  return { top: BAR + 8, bottom: innerHeight - Math.max(90, box + 24) };
 }
+
+/** Where on the screen a sentence's lines in `block` are (a sentence cut by a column or page break is in two). */
+function screenSpan(block, chunk) {
+  const part = chunk?.join?.find((j) => j.block === block)?.chunk ?? (chunk?.join ? null : chunk);
+  const rects = part && part.start != null ? chunkRects(block, part) : [];
+  if (!rects.length) { const r = block.el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }
+  const pr = block.page.el.getBoundingClientRect(), k = pr.height / block.page.h;
+  return { top: pr.top + rects[0].top * k, bottom: pr.top + rects[rects.length - 1].bottom * k };
+}
+
+/**
+ * Bring what is being read into view. At a new paragraph (`fresh`), the page moves to it,
+ * wherever the reader had scrolled, putting its start near the top unless it is all in
+ * sight already. Within a paragraph, a sentence that has run out of sight is followed,
+ * though not while the reader has just scrolled elsewhere themselves.
+ */
+function follow(block, chunk, fresh) {
+  if (!block.el?.isConnected) return;
+  if (!fresh && performance.now() - handScrolled < 6000) return;
+  const band = readingBand(), air = (band.bottom - band.top) * 0.12;
+  const said = chunk ? screenSpan(block, chunk) : null;
+  let top;
+  if (fresh) {
+    const p = block.el.getBoundingClientRect();
+    const end = said?.bottom ?? p.bottom;
+    if (p.top >= band.top && Math.max(p.bottom, end) <= band.bottom) return; // all of it in sight
+    // Its start, unless that would leave the sentence below the window (a paragraph read from the middle).
+    top = said && said.bottom - p.top > band.bottom - band.top - air ? said.top : Math.min(p.top, said?.top ?? p.top);
+  } else {
+    if (!said || (said.top >= band.top && said.bottom <= band.bottom)) return;
+    top = said.top;
+  }
+  const by = top - (band.top + air);
+  if (Math.abs(by) > 2) window.scrollBy({ top: by, behavior: Math.abs(by) > innerHeight * 1.5 ? 'auto' : 'smooth' });
+}
+let followed = null; // the sentence last brought into view, and the part of the paragraph it was in
 
 async function openPdf(source, name) {
   const token = ++view.token;
@@ -1417,7 +1472,11 @@ const voice = {
         name = 'default';
       }
     }
-    const pcm = await tts.synth(text, { voice: name, signal });
+    // A sentence is whole however long, but the model takes only so much text at once: a long one
+    // is said in clauses, one after another.
+    const said = [];
+    for (const piece of turboPieces(text, 280)) said.push(await tts.synth(piece, { voice: name, signal }));
+    const pcm = said.length === 1 ? said[0] : concatPcm(said);
     return { pcm: timeStretch(pcm, pacing(settings.speed).stretch, tts.sampleRate), rate: tts.sampleRate };
   },
 };
@@ -2108,8 +2167,13 @@ function setActive(block, chunk, auto = false, mode = 'read') {
     if (prev) for (const b of partsOf(prev)) b.el.classList.remove('active', 'pending', 'explain');
     speaker.active = block;
     if (block) select(null);
-    if (block && auto) reveal(block);
     if (prev && block && prev.page !== block.page) narration.relayout();
+  }
+  // A new sentence (or the next part of one) being read: keep it in view, moving to it at a new paragraph.
+  if (!block) followed = null;
+  else if (auto && chunk && (followed?.block !== block || followed.chunk !== chunk)) {
+    follow(block, chunk, !followed || headOf(followed.block) !== headOf(block));
+    followed = { block, chunk };
   }
   // Every part of the paragraph lights up, wherever on the page (or the next) it sits.
   if (block) for (const b of partsOf(block)) {
