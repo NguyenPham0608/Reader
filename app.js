@@ -13,7 +13,7 @@ const els = {
   bar: $('bar'), docTitle: $('docTitle'), pageInd: $('pageInd'), welcome: $('welcome'), pages: $('pages'),
   player: $('player'), playBtn: $('playBtn'), retryBtn: $('retryBtn'),
   prevBtn: $('prevBtn'), nextBtn: $('nextBtn'), scopeBtn: $('scopeBtn'), scopeMenu: $('scopeMenu'), voiceBtn: $('voiceBtn'), voiceMenu: $('voiceMenu'), langBtn: $('langBtn'), langMenu: $('langMenu'),
-  capBtn: $('capBtn'), caption: $('caption'), captionLang: $('captionLang'), captionText: $('captionText'),
+  capBtn: $('capBtn'), caption: $('caption'), captionText: $('captionText'),
   speedSel: $('speedSel'), stopBtn: $('stopBtn'), progress: $('progress'), veil: $('veil'), toast: $('toast'),
   fileInput: $('fileInput'), voiceNote: $('voiceNote'), aiChip: $('aiChip'), aiChipText: $('aiChipText'),
   chat: $('chat'), chatLog: $('chatLog'), chatForm: $('chatForm'), chatInput: $('chatInput'),
@@ -2198,13 +2198,13 @@ function wordWeight(part) {
  * each word takes a share of the time by its spoken length, the last one drawn out a little.
  * (Measured against a speech recogniser's timings, this is off by about 0.09 s on average.)
  */
-function wordTimes(parts, pcm, rate) {
-  const FINAL = 4;   // extra weight on the word before a pause: voices draw it out
+function wordTimes(parts, pcm, rate, { weigh = wordWeight, final = 4, dips = false } = {}) {
+  const FINAL = final; // extra weight on the word before a pause: voices draw it out
   const BARE = 1.2;  // cost of a 0.2 s pause where the text has no punctuation, in seconds of misfit
   const SKIP = 0.6;  // cost of taking a 0.2 s pause as falling inside a word
   const N = parts.length, ph = spokenPhrases(pcm, rate), K = ph.length;
   const cum = [0];
-  for (const part of parts) cum.push(cum[cum.length - 1] + wordWeight(part));
+  for (const part of parts) cum.push(cum[cum.length - 1] + weigh(part));
   const per = ph.reduce((sum, [a, b]) => sum + b - a, 0) / (cum[N] + K * FINAL); // seconds per unit of weight
   // best[k][i]: the least cost of having said words 0..i-1 by the end of phrase k, with a pause there.
   const best = ph.map(() => new Float64Array(N + 1).fill(Infinity));
@@ -2228,6 +2228,7 @@ function wordTimes(parts, pcm, rate) {
     }
   }
   const times = new Array(N).fill(ph[0][0]);
+  const loud = dips ? loudness(pcm, rate) : null;
   for (let k = K - 1, i = N; k >= 0 && from[k][i];) {
     const [k0, i0] = from[k][i];
     const span = ph.slice(k0 + 1, k + 1), dur = span.reduce((sum, [a, b]) => sum + b - a, 0);
@@ -2235,9 +2236,56 @@ function wordTimes(parts, pcm, rate) {
       let at = (cum[j] - cum[i0]) / (cum[i] - cum[i0] + FINAL) * dur;
       for (const [a, b] of span) { if (at <= b - a + 1e-9) { times[j] = a + at; break; } at -= b - a; }
     }
+    if (loud) toDips(times, i0, i, span, loud);
     k = k0; i = i0;
   }
   return times;
+}
+
+/** How loud the voice is, every 10 ms, a little smoothed. */
+function loudness(pcm, rate) {
+  const n = Math.round(rate * 0.01), frames = Math.floor(pcm.length / n), rms = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    let e = 0;
+    for (let i = f * n, end = i + n; i < end; i++) e += pcm[i] * pcm[i];
+    rms[f] = Math.sqrt(e / n);
+  }
+  return rms.map((_, f) => (rms[Math.max(0, f - 1)] + rms[f] + rms[Math.min(frames - 1, f + 1)]) / 3);
+}
+
+/**
+ * Move the starts of words j0+1..j1-1 (said without a pause, in `span`) to where the voice dips
+ * between syllables, near where their share of the time put them: a word that is a syllable
+ * (as in Vietnamese) begins at such a dip. Each looks no further than a little of the words
+ * either side, and none comes before the one before it.
+ */
+function toDips(times, j0, j1, span, loud) {
+  const [a, b] = [span[0][0], span[span.length - 1][1]];
+  let peak = 0;
+  for (let f = Math.floor(a * 100); f < Math.min(loud.length, Math.ceil(b * 100)); f++) peak = Math.max(peak, loud[f]);
+  if (!peak) return;
+  for (let j = j0 + 1; j < j1; j++) {
+    const expect = times[j], reach = Math.max(0.04, 0.4 * Math.min(times[j] - times[j - 1], (times[j + 1] ?? b) - times[j]));
+    let best = expect, cost = Infinity;
+    for (let f = Math.ceil(Math.max(times[j - 1] + 0.05, expect - reach) * 100); f <= Math.floor(Math.min(b - 0.05, expect + reach) * 100); f++) {
+      const c = loud[f] / peak + 0.5 * ((f / 100 - expect) / reach) ** 2; // quiet, and near where it was expected
+      if (c < cost) { cost = c; best = f / 100; }
+    }
+    times[j] = Math.max(best, times[j - 1] + 0.03);
+  }
+}
+
+/**
+ * How long a word of a sentence said in translation takes, in syllables: a Vietnamese word is one
+ * syllable, an English word one for each group of vowels, an abbreviation (said letter by letter)
+ * about one a letter.
+ */
+function syllables(word) {
+  const w = word.replace(/[^\p{L}\p{N}]/gu, '');
+  if (!w) return 0.3;
+  if (/^[a-z]?[A-Z]{2,8}$/.test(w)) return [...w].reduce((n, c) => n + (/w/i.test(c) ? 3 : 1), 0);
+  if (/[^\x00-\x7F]/.test(w)) return 1; // Vietnamese, with its marks
+  return Math.max(1, (w.toLowerCase().match(/[aeiouy]+/g) || []).length);
 }
 
 /**
@@ -2248,17 +2296,17 @@ function wordTimes(parts, pcm, rate) {
 function captionOf(s, seg, start) {
   const words = voiced(s, seg.chunk).split(/\s+/).filter(Boolean);
   let at = 0;
-  const times = words.map((w) => { const t = at; at += wordWeight(w) * captionPace; return t; });
+  const times = words.map((w) => { const t = at; at += syllables(w) * captionPace; return t; });
   return { words, times, start };
 }
-let captionPace = 0.035; // seconds per unit of `wordWeight`, from the sentences said lately
+let captionPace = 0.19; // seconds a syllable, from the sentences said lately
 
 /** Time a caption's words from its sentence's audio, now that all of it is made. */
 function timeCaption(caption, pcm, rate) {
   if (!caption || !pcm?.length) return;
   try {
-    caption.times = wordTimes(caption.words, pcm, rate);
-    const weight = caption.words.reduce((sum, w) => sum + wordWeight(w), 0);
+    caption.times = wordTimes(caption.words, pcm, rate, { weigh: syllables, final: 0.6, dips: true });
+    const weight = caption.words.reduce((sum, w) => sum + syllables(w), 0);
     if (weight) captionPace = 0.7 * captionPace + 0.3 * (pcm.length / rate / weight);
   } catch (e) {
     console.warn('Could not time the sentence box', e); // the guess stays
@@ -2282,7 +2330,7 @@ const captionMark = {
   follow(entry, t) {
     const c = entry.caption;
     if (!c || c !== this.caption || !c.times.length) return;
-    const at = t + WORD_LEAD - c.start;
+    const at = t + 0.03 - c.start; // a touch ahead, as the eye is (no glide to wait for, as on the page)
     let i = c.times.length - 1;
     while (i > 0 && c.times[i] > at) i--;
     if (i === this.at) return;
@@ -2505,7 +2553,6 @@ function renderPlayer() {
     const entry = s.sched[s.cur]; // (said by the system's voice, it has no timing: the words, unmarked)
     captionMark.show(entry.caption ??= { words: spoken(said.chunk).split(/\s+/).filter(Boolean), times: [] });
     els.captionText.lang = s.lang;
-    els.captionLang.textContent = languageName(s.lang);
   }
   els.capBtn.hidden = !settings.lang;
   els.capBtn.setAttribute('aria-pressed', !!settings.captions);

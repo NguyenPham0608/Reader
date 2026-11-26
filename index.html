@@ -33,14 +33,16 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 14px 36px -14px rgba(40, 30, 10, .22);
     --green: #0f9d6c;
     --blue: #2563eb;
-    /* Highlights sit on the white page and blend like a marker, so they are the same in both themes. */
+    /* Highlights sit on the white page and blend like a marker, so they are the same in both themes.
+       Reading: a mint paragraph, a lavender sentence with a violet outline, a gold word, each
+       plainly apart from the next (the word most of all); black text stays above 12:1 where all three meet. */
     --hover: rgba(128, 112, 84, .1);
-    --para: rgba(251, 255, 179, 0.17);
-    --sentence: rgba(128, 255, 132, 0.24);
+    --para: rgba(160, 230, 190, .18);
+    --sentence: rgba(255, 196, 40, .5);
     --explain: rgba(66, 138, 255, .24);
     --explain-deep: rgba(66, 138, 255, .4);
-    --box-fill: rgba(255, 177, 128, 0.255);
-    --box-line: rgba(217, 44, 44, 0.65);
+    --box-fill: rgba(190, 160, 255, .22);
+    --box-line: rgba(140, 100, 225, .6);
     --pulse: rgba(255, 214, 92, .34);
     --zoom: 1;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -292,14 +294,16 @@
   }
   .toast.on { opacity: 1; transform: translate(-50%, 0); }
   /* The sentence being read, in the language it is read in. */
+  /* Over the pages, as far in from their sides as from the bottom of the window, and coloured as the
+     sentence is on them: its fill on white paper, its outline. */
   .caption {
-    position: fixed; left: 50%; bottom: 18px; z-index: 28; transform: translateX(-50%);
-    width: max-content; max-width: min(760px, calc(100vw - 180px)); padding: 10px 18px 12px; text-align: center;
-    border-radius: 16px; background: var(--panel); border: 1px solid var(--line); pointer-events: none;
+    --gap: 18px;
+    position: fixed; left: 50%; bottom: var(--gap); z-index: 28; transform: translateX(-50%); box-sizing: border-box;
+    width: min(calc(min(880px, 100vw - 32px) * var(--zoom) - 2 * var(--gap)), calc(100vw - 2 * var(--gap))); padding: 10px 18px 12px; text-align: center;
+    border-radius: 16px; pointer-events: none; color: #1c1b19;
+    background: linear-gradient(var(--box-fill), var(--box-fill)), #fff; border: 1.5px solid var(--box-line);
     box-shadow: 0 2px 6px rgba(0, 0, 0, .06), 0 18px 44px -12px rgba(0, 0, 0, .28);
-    -webkit-backdrop-filter: saturate(1.6) blur(20px); backdrop-filter: saturate(1.6) blur(20px);
   }
-  .caption small { display: block; margin-bottom: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .55; }
   .caption p { margin: 0; font-size: 17px; line-height: 1.45; text-wrap: balance; }
   .caption p span { border-radius: 4px; padding: 0 1px; transition: background-color .08s; }
   .caption p span.now { background: var(--sentence); } /* the word being said, in the page's colour for it */
@@ -324,6 +328,7 @@
     .chat-explain { padding: 0 12px; }
     .pages { padding-left: 8px; padding-right: 8px; gap: 12px; }
     .page { width: calc((100vw - 16px) * var(--zoom)); }
+    .caption { width: calc(100vw - 16px - 2 * var(--gap)); }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01s !important; transition-duration: .01s !important; }
@@ -423,7 +428,7 @@
 </dialog>
 
 <div class="veil" id="veil">Drop to open</div>
-<div class="caption" id="caption" hidden><small id="captionLang"></small><p id="captionText"></p></div>
+<div class="caption" id="caption" hidden><p id="captionText"></p></div>
 <div class="toast" id="toast" role="status"></div>
 <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
 
