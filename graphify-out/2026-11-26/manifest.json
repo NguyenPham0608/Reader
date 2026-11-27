@@ -1,12 +1,12 @@
 {
   "app.js": {
-    "mtime": 1795586229.40476,
-    "ast_hash": "8fd884be6f478170d9b620bdfafc5b1d",
+    "mtime": 1795758916.2074435,
+    "ast_hash": "fabd80fceb4030ac4096ea8fecb82b26",
     "semantic_hash": ""
   },
   "serve.py": {
-    "mtime": 1795586165.2197917,
-    "ast_hash": "aeb84c80abb9e9c3ec5d5e557335adcd",
+    "mtime": 1795642982.9187942,
+    "ast_hash": "ae7872309fd5253d849e211c7f1ea441",
     "semantic_hash": ""
   },
   "vendor/pdfjs/pdf.min.mjs": {
@@ -35,13 +35,13 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795583542.42174,
-    "ast_hash": "10a7f15d257c18476c3733d6b0c2d368",
+    "mtime": 1795758925.8484626,
+    "ast_hash": "bcb1454b58ffdd1ff7f738ac03230c4c",
     "semantic_hash": ""
   },
   "ai.js": {
-    "mtime": 1795586181.4853597,
-    "ast_hash": "d6617ad2e870c80be18cf255fe24a664",
+    "mtime": 1795643019.1947446,
+    "ast_hash": "e67be1b51dc06d5b2f3760af53356dbf",
     "semantic_hash": ""
   },
   "vendor/phonon/device.js": {
@@ -180,48 +180,18 @@
     "semantic_hash": ""
   },
   "render.yaml": {
-    "mtime": 1795586168.8778162,
-    "ast_hash": "6829f057ebeeeac2c1cd10676e11513d",
+    "mtime": 1795639916.0220697,
+    "ast_hash": "b4fa8baff45bbfce3bf6d519641a0ea3",
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1794797911.1026852,
-    "ast_hash": "9cead42df94b351f328ade4af6058888",
-    "semantic_hash": ""
-  },
-  "piper-worker.js": {
-    "mtime": 1795238744.4685156,
-    "ast_hash": "e57afa6952c7ee8ddd72df3695392c3e",
-    "semantic_hash": ""
-  },
-  "vendor/piper/ort.wasm.bundle.min.mjs": {
-    "mtime": 1795236632.232956,
-    "ast_hash": "885ea5f59e110da3bddf8ccfd6c9f88e",
-    "semantic_hash": ""
-  },
-  "vendor/piper/piper_phonemize.mjs": {
-    "mtime": 1795236632.2382889,
-    "ast_hash": "9d2d124b6bfca1ff1ed5d0222a752f8f",
+    "mtime": 1795636636.9307873,
+    "ast_hash": "2445c79ed78aea94be32e633b48feaa5",
     "semantic_hash": ""
   },
   "neural.js": {
-    "mtime": 1795586198.84993,
-    "ast_hash": "cd80f10ec403eba438712e1b508a9071",
-    "semantic_hash": ""
-  },
-  "vendor/vieneu/voices.json": {
-    "mtime": 1795239168.9867969,
-    "ast_hash": "d2894569a4ee9ee691a1369e2cbed581",
-    "semantic_hash": ""
-  },
-  "vieneu-worker.js": {
-    "mtime": 1795239266.6533184,
-    "ast_hash": "49006d824f73725817ad2a7f57ee3970",
-    "semantic_hash": ""
-  },
-  "supertonic-worker.js": {
-    "mtime": 1795241912.5355234,
-    "ast_hash": "b8f268c457f12d5e2bb1888641487e2f",
+    "mtime": 1795662592.9139228,
+    "ast_hash": "9fe5f21a0d599b851f844e110254d4fd",
     "semantic_hash": ""
   },
   "speakable.js": {
@@ -235,13 +205,13 @@
     "semantic_hash": ""
   },
   "tests/test_translate.py": {
-    "mtime": 1795584646.8830764,
-    "ast_hash": "9a1bd78ac3fb7b1c9ed498e172b4a39b",
+    "mtime": 1795643003.7261393,
+    "ast_hash": "33e01ebef56c03f2e663d367f891b13c",
     "semantic_hash": ""
   },
   "cache.js": {
-    "mtime": 1795586181.423964,
-    "ast_hash": "f392f84be268c029c216000be27e1d10",
+    "mtime": 1795639855.1497726,
+    "ast_hash": "26dc0c508517b358e145e91ad9dd70aa",
     "semantic_hash": ""
   },
   "tests/cache.test.mjs": {
@@ -249,9 +219,49 @@
     "ast_hash": "ec3be4e033a93bc650337959da82050c",
     "semantic_hash": ""
   },
-  "tests/test_speech.py": {
-    "mtime": 1795586266.868314,
-    "ast_hash": "b7a810d07f9d883648d4d4f2c241f3ca",
+  "coi-serviceworker.js": {
+    "mtime": 1795636604.6728344,
+    "ast_hash": "79659612e0154084bea972215e3c0611",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/vieneu-turbo-tokenizer.json": {
+    "mtime": 1795636715.5054107,
+    "ast_hash": "5e870a74d0a42ccb90537022dc19e7fa",
+    "semantic_hash": ""
+  },
+  "tests/test_phonemes.py": {
+    "mtime": 1795636652.3542457,
+    "ast_hash": "881575cade63f47b9fc4012b4ffe7dea",
+    "semantic_hash": ""
+  },
+  "tests/vieneu-turbo.test.mjs": {
+    "mtime": 1795662612.533436,
+    "ast_hash": "fa93ca7b65dfb69148292ac74d88603a",
+    "semantic_hash": ""
+  },
+  "vendor/onnxruntime/ort.wasm.bundle.min.mjs": {
+    "mtime": 1795236632.232956,
+    "ast_hash": "885ea5f59e110da3bddf8ccfd6c9f88e",
+    "semantic_hash": ""
+  },
+  "vendor/vieneu-turbo/voices.json": {
+    "mtime": 1795660528.3170838,
+    "ast_hash": "43ec883e3186a70e5bd8ebc0c4969822",
+    "semantic_hash": ""
+  },
+  "vieneu-turbo-lib.js": {
+    "mtime": 1795662606.5144405,
+    "ast_hash": "df567211acb09fa2536d772f6f3fdf62",
+    "semantic_hash": ""
+  },
+  "vieneu-turbo-worker.js": {
+    "mtime": 1795659539.2580013,
+    "ast_hash": "16db01010288de7bd28ae26833d5b715",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1795756519.9203887,
+    "ast_hash": "ce3b2b4942722e2537aa76c8346da64d",
     "semantic_hash": ""
   }
 }

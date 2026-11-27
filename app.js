@@ -6,6 +6,13 @@ import { VOICES, VOICE_BASE } from './voices.js';
 import { ai, AiError } from './ai.js';
 import { speakable } from './speakable.js';
 
+// An app that shows the reader inside itself (the VS Code extension) sets this before the page
+// loads: it then has its own controls, toasts and key prompt, and drives the reader through
+// `reader.control` (at the end of this file). On its own, the page has none of this.
+const host = window.readerHost ?? null;
+let playerNow = { text: '', sub: '', loading: false }, chipNow = { state: 'off', text: '', title: '' }; // what the controls last showed, for the host
+let hostTimer = 0, hostSent = '';
+
 const VENDOR = new URL('./vendor/pdfjs/', import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.min.mjs';
 
@@ -921,7 +928,7 @@ async function openFile(file) {
   openPdf(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.pdf$/i, ''));
 }
 
-const BAR = 56; // top bar height plus a little air
+const BAR = host ? 8 : 56; // top bar height plus a little air (a host shows its own controls instead)
 let pageIndQueued = false;
 let anchor = null; // the page at the top of the window, and how far through it we are
 function updatePageInd() {
@@ -936,6 +943,7 @@ function updatePageInd() {
     if (r.bottom > mid) { n = p.n; break; }
   }
   els.pageInd.textContent = `${n} / ${view.pages.length}`;
+  tellHost();
 }
 
 /** After the layout changes size, put the same spot of the same page back at the top. */
@@ -961,6 +969,7 @@ function setZoom(z) {
 
 let toastTimer = 0;
 function toast(msg, ms = 4000) {
+  if (host) { host.toast(msg, ms); return; }
   els.toast.textContent = msg;
   els.toast.classList.add('on');
   clearTimeout(toastTimer);
@@ -2438,7 +2447,7 @@ const wordMark = {
     if (w.block !== speaker.active && speaker.session) setActive(w.block, chunk, true, speaker.session.mode);
     const fresh = this.el.parentNode !== p.hl || !this.el.classList.contains('on');
     if (fresh) { this.el.classList.add('jump'); p.hl.append(this.el); }
-    const padX = w.block.size * 0.14, padY = w.block.size * 0.08;
+    const padX = w.block.size * 0.12, padY = w.block.size * 0.1;
     place(this.el, r.x0 - padX, r.top - padY, r.x1 + padX, r.bottom + padY, p);
     if (fresh) { this.el.getBoundingClientRect(); this.el.classList.remove('jump'); } // appear in place, then glide
     this.el.classList.add('on');
@@ -2487,7 +2496,8 @@ function sentenceBoxes(seg, kind) {
     // The words only: the space after a sentence is left outside, so two neighbouring boxes don't overlap.
     const text = block.text.slice(chunk.start, chunk.end);
     const range = { start: chunk.start + text.length - text.trimStart().length, end: chunk.start + text.trimEnd().length };
-    const padX = block.size * 0.09, padY = block.size * 0.06;
+    // Room round the letters, so the fill covers them whole: lines run together into one shape.
+    const padX = block.size * 0.22, padY = block.size * 0.16;
     let group = null; // lines that follow on from one another; a new column starts a new shape
     for (const r of chunkRects(block, range)) {
       const box = { x0: r.x0 - padX, x1: r.x1 + padX, top: r.top - padY, bottom: r.bottom + padY };
@@ -2496,7 +2506,7 @@ function sentenceBoxes(seg, kind) {
       else {
         group = [box];
         if (!byPage.has(block.page)) byPage.set(block.page, []);
-        byPage.get(block.page).push({ group, radius: block.size * 0.28 });
+        byPage.get(block.page).push({ group, radius: block.size * 0.36 });
       }
     }
   }
@@ -2632,6 +2642,8 @@ function renderPlayer() {
   }
   els.capBtn.hidden = !settings.lang;
   els.capBtn.setAttribute('aria-pressed', !!settings.captions);
+  playerNow = { text, sub, loading };
+  tellHost();
   els.progress.style.height = (sys ? 100 : engine.pct) + '%';
   els.progress.classList.toggle('done', !loading);
   if (location.protocol !== 'file:') {
@@ -2664,9 +2676,12 @@ function renderChip() {
   els.aiChip.dataset.state = state;
   els.aiChip.title = title;
   els.aiChipText.textContent = text;
+  chipNow = { state, text, title };
+  tellHost();
 }
 
 function openKeyDialog() {
+  if (host) { host.askKey(); return; }
   els.keyErr.textContent = '';
   els.keyInput.value = '';
   els.keyDialog.showModal();
@@ -2687,6 +2702,8 @@ function menuItem(data, title, tags, about) {
   item.append(name, small, span);
   return item;
 }
+/** Close a menu that is open (one chosen from by a host was never opened). */
+const closeMenu = (menu) => { if (menu.matches(':popover-open')) menu.hidePopover(); };
 const menuHead = (text) => Object.assign(document.createElement('div'), { className: 'voice-group', textContent: text });
 
 /** The voices to choose from: the reader's own or, for another language, the system's voices for it. */
@@ -3014,7 +3031,7 @@ els.capBtn.addEventListener('click', () => {
 els.scopeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  els.scopeMenu.hidePopover();
+  closeMenu(els.scopeMenu);
   setScope(item.dataset.scope);
 });
 els.speedSel.addEventListener('change', () => {
@@ -3032,14 +3049,14 @@ els.voiceMenu.addEventListener('click', (e) => {
   saveSettings();
   markVoice();
   translation.prepare(); // a voice that says more or less English the English way keeps to its own glossary
-  els.voiceMenu.hidePopover();
+  closeMenu(els.voiceMenu);
   renderPlayer();
   if (speaker.session) speaker.restart(); else speaker.preview(settings.voice);
 });
 els.langMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.voice-item');
   if (!item) return;
-  els.langMenu.hidePopover();
+  closeMenu(els.langMenu);
   setLang(item.dataset.lang);
 });
 els.voiceMenu.addEventListener('toggle', (e) => {
@@ -3085,10 +3102,20 @@ $('openBtn').addEventListener('click', () => els.fileInput.click());
 $('chooseBtn').addEventListener('click', () => els.fileInput.click());
 els.fileInput.addEventListener('change', () => { openFile(els.fileInput.files[0]); els.fileInput.value = ''; });
 
+// A paragraph clicked to read keeps the focus, and the first key pressed after would draw the
+// keyboard's focus ring round it. Reached by Tab, the ring stays: it shows where the keyboard is.
+let focusByPointer = false;
+addEventListener('pointerdown', () => { focusByPointer = true; }, true);
+addEventListener('keydown', (e) => { if (e.key === 'Tab') focusByPointer = false; }, true);
+
 addEventListener('keydown', (e) => {
   if (!view.doc || e.metaKey || e.ctrlKey || e.altKey || els.keyDialog.open) return;
-  const t = e.target;
+  let t = e.target;
   if (t.tagName === 'SELECT' || t.tagName === 'INPUT') return;
+  if (focusByPointer && t.classList?.contains('blk') && [' ', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key)) {
+    t.blur();
+    t = document.body;
+  }
   if (e.key === ' ') {
     if (t.tagName === 'BUTTON' && t.matches(':focus-visible')) return; // let keyboard users press the focused button
     e.preventDefault();
@@ -3139,4 +3166,93 @@ aiReady.then(() => {
 const linked = new URLSearchParams(location.search).get('file');
 if (linked) openPdf(new URL(linked, location.href).href, decodeURIComponent(linked.split('/').pop()).replace(/\.pdf$/i, ''));
 
-window.reader = { speaker, view, settings, voice, neural, ai, narration, translation, sentencePick };
+// ── A host's way in ─────────────────────────────────────────────────────────
+// An app showing the reader (see `host` at the top) has its own buttons for what the page's player
+// and top bar do. They come here, and choose from the same menus the page builds for itself.
+
+/** What the reader's controls show, for a host's own. */
+function hostState() {
+  const s = speaker.session, scope = SCOPES.find((x) => x.id === settings.scope);
+  return {
+    doc: view.doc ? view.name : '', page: view.doc ? els.pageInd.textContent : '', pages: view.pages.length,
+    at: anchor ? { page: anchor.p.n, frac: Math.round(anchor.frac * 1000) / 1000 } : null, // the spot at the top of the window
+    reading: !!s, playing: !!s && !s.paused, canSkip: !!s || !!speaker.recent,
+    waiting: !!s && !s.paused && s.cur < 0, // nothing heard yet: the voice or Claude is getting it ready
+    status: playerNow.text, detail: playerNow.sub, loading: playerNow.loading,
+    scope: { id: scope.id, name: scope.name, unit: scope.unit },
+    voice: els.voiceBtn.textContent, speed: settings.speed,
+    lang: settings.lang, language: settings.lang ? languageName(settings.lang) : '', captions: !!settings.captions,
+    claude: { ...chipNow, on: !!settings.ai && ai.available },
+  };
+}
+
+/** Let the host know what changed, a few times a second at most, and only when something did. */
+function tellHost() {
+  if (!host || hostTimer) return;
+  hostTimer = setTimeout(() => {
+    hostTimer = 0;
+    const state = JSON.stringify(hostState());
+    if (state !== hostSent) { hostSent = state; host.state(JSON.parse(state)); }
+  }, 60);
+}
+
+const MENUS = { scope: () => els.scopeMenu, voice: () => els.voiceMenu, lang: () => els.langMenu };
+
+const control = {
+  /** Open a PDF from its bytes. */
+  open(bytes, name) {
+    return openPdf(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), String(name).replace(/\.pdf$/i, ''));
+  },
+  /** Scroll to page `n`, `frac` of the way down it. */
+  goTo(n, frac = 0) {
+    const p = view.pages[Math.min(view.pages.length, Math.max(1, Math.round(n))) - 1];
+    if (!p) return;
+    anchor = { p, frac: Math.min(1, Math.max(0, frac)) };
+    restoreAnchor();
+    updatePageInd();
+  },
+  toggle: () => speaker.toggle(),
+  skip: (dir) => speaker.skip(dir),
+  stop: () => speaker.stop(),
+  /** The choices in one of the menus ('scope', 'voice', 'lang' or 'speed'), in order: [{ label, tags, about, group, checked }] */
+  choices(kind) {
+    if (kind === 'speed') return [...els.speedSel.options].map((o) => ({ label: o.textContent, tags: '', about: '', group: '', checked: o.selected }));
+    const out = [];
+    let group = '';
+    for (const el of MENUS[kind]().children) {
+      if (el.classList.contains('voice-group')) group = el.textContent;
+      else if (el.classList.contains('voice-item')) {
+        const part = (sel) => el.querySelector(sel)?.textContent ?? '';
+        out.push({ label: part('b'), tags: part('small'), about: part('span'), group, checked: el.getAttribute('aria-checked') === 'true' });
+      }
+    }
+    return out;
+  },
+  /** Choose the `i`th of a menu's choices, as a click on it would. */
+  choose(kind, i) {
+    if (kind === 'speed') {
+      els.speedSel.selectedIndex = i;
+      els.speedSel.dispatchEvent(new Event('change'));
+      tellHost();
+      return;
+    }
+    MENUS[kind]().querySelectorAll('.voice-item')[i]?.click();
+  },
+  captions: () => els.capBtn.click(),
+  claude: () => els.aiChip.click(),
+  zoom: (by) => setZoom(settings.zoom * by),
+  colours: () => $('prefs').togglePopover(),
+  /** The API key changed: ask again what Claude can do, and use it if it now can. */
+  async keyChanged() {
+    await ai.init();
+    if (ai.available) {
+      settings.ai = true;
+      saveSettings();
+      startClaude().then(() => view.pages.filter((p) => p.near).forEach((p) => narration.request(p)));
+    }
+    renderChip();
+    renderPlayer();
+  },
+};
+
+window.reader = { speaker, view, settings, voice, neural, ai, narration, translation, sentencePick, control };

@@ -1,7 +1,7 @@
 {
   "app.js": {
-    "mtime": 1795751877.8719244,
-    "ast_hash": "30cbd8ca6882fe4339ab66dd8b189f73",
+    "mtime": 1795759141.8316784,
+    "ast_hash": "10231e5aabb19080fddcdf65fd6d84cf",
     "semantic_hash": ""
   },
   "serve.py": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1795751877.886486,
-    "ast_hash": "5dc8bf9a951f777b4e74e48d1abe8537",
+    "mtime": 1795758925.8484626,
+    "ast_hash": "bcb1454b58ffdd1ff7f738ac03230c4c",
     "semantic_hash": ""
   },
   "ai.js": {
@@ -257,6 +257,11 @@
   "vieneu-turbo-worker.js": {
     "mtime": 1795659539.2580013,
     "ast_hash": "16db01010288de7bd28ae26833d5b715",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1795756519.9203887,
+    "ast_hash": "ce3b2b4942722e2537aa76c8346da64d",
     "semantic_hash": ""
   }
 }
