@@ -805,9 +805,9 @@ function screenSpan(block, chunk) {
  * sight already. Within a paragraph, a sentence that has run out of sight is followed,
  * though not while the reader has just scrolled elsewhere themselves.
  */
-function follow(block, chunk, fresh) {
+function follow(block, chunk, fresh, force = false) {
   if (!block.el?.isConnected) return;
-  if (!fresh && performance.now() - handScrolled < 6000) return;
+  if (!fresh && !force && performance.now() - handScrolled < 6000) return;
   const band = readingBand(), air = (band.bottom - band.top) * 0.12;
   const said = chunk ? screenSpan(block, chunk) : null;
   let top;
@@ -893,6 +893,7 @@ async function openPdf(source, name) {
 function closeDoc() {
   speaker.recent = null;
   sentencePick.hide();
+  sentenceMark.hide();
   nearObserver.disconnect();
   for (const p of view.pages) p.renderTask?.cancel();
   view.pages = [];
@@ -1745,15 +1746,15 @@ const speaker = {
     const scope = this.session?.mode === 'explain' ? 'paragraph' : settings.scope; // from a reply, this goes back to reading
     const firstOf = (seg) => seg.chunk.join?.[0].chunk ?? seg.chunk;
     const outward = () => nextReadable(dir > 0 ? tailOf(from) : headOf(from), dir);
-    let to = null, sentence = null;
+    let to = null, seg = null;
     if (scope === 'sentence') {
       const segs = paragraphSegs(headOf(from));
-      const at = this.at && sameParagraph(this.at.block, from) ? segs.findIndex((seg) => holds(seg, firstOf(this.at))) : -1;
-      const next = segs[at + dir];
-      if (at >= 0 && next) { to = headOf(from); sentence = firstOf(next); }
+      const at = this.at && sameParagraph(this.at.block, from) ? segs.findIndex((x) => holds(x, firstOf(this.at))) : -1;
+      if (at >= 0 && segs[at + dir]) { to = headOf(from); seg = segs[at + dir]; }
       else {
         to = await outward();
-        if (to && dir < 0) sentence = firstOf(paragraphSegs(headOf(to)).pop()); // back into a paragraph at its last sentence
+        // On into a paragraph at its first sentence, back into one at its last.
+        if (to) { const all = paragraphSegs(headOf(to)); seg = dir < 0 ? all.pop() : all[0]; }
       }
     } else if (scope === 'section') {
       to = await nextHeading(dir > 0 ? tailOf(from) : headOf(from), dir);
@@ -1762,8 +1763,13 @@ const speaker = {
     }
     if (here() !== from) return;
     if (!to) { toast(`No ${dir > 0 ? 'more' : 'earlier'} ${SCOPES.find((x) => x.id === scope).unit}s.`, 2200); return; }
+    const sentence = seg && firstOf(seg);
     this.start(to, 'read', null, sentence, true);
-    reveal(to);
+    if (!seg) { reveal(to); return; }
+    // A sentence at a time, the page moves only if the sentence is out of sight, and only as far as
+    // it needs: not to its paragraph's start first. Marked as followed, so its reading doesn't move it again.
+    follow(seg.block, sentence, false, true);
+    followed = { block: seg.block, chunk: sentence };
   },
 
   /** The amount read at a time changed: let the session run on, or cut it back to what is now wanted. */
@@ -2143,9 +2149,12 @@ const speaker = {
   /** End the session. With `keep`, the paragraph it ended on stays selected, so a sentence of it can be heard again. */
   stop(keep = false) {
     const last = keep ? this.active : null;
+    // Reading a sentence at a time, the sentence just read stays outlined with its paragraph.
+    const mark = last && settings.scope === 'sentence' ? sentenceMark.seg : null;
     this.halt();
     setActive(null, null);
     select(last);
+    if (mark) sentenceMark.show(mark);
     renderPlayer();
     narration.relayout();
   },
@@ -2155,7 +2164,10 @@ const speaker = {
 
 /** Keep a paragraph marked once it has been read to its end (`speaker.recent`), or let go of the one that was. */
 function select(block) {
-  if (speaker.recent) for (const b of partsOf(speaker.recent)) b.el.classList.remove('selected');
+  if (speaker.recent) {
+    for (const b of partsOf(speaker.recent)) b.el.classList.remove('selected');
+    sentenceMark.hide(); // the sentence kept outlined with it
+  }
   speaker.recent = block || null;
   if (block) for (const b of partsOf(block)) b.el.classList.add('selected');
   else sentencePick.hide();
@@ -2973,7 +2985,15 @@ const setHover = (block) => {
 };
 els.pages.addEventListener('mouseover', (e) => setHover(blockOf.get(e.target)));
 els.pages.addEventListener('mouseleave', () => { setHover(null); sentencePick.hide(); });
-els.pages.addEventListener('mousemove', (e) => sentencePick.follow(blockOf.get(e.target), e));
+// Moving by the arrow keys, the pointer's outline and paragraph tint step aside until it really moves:
+// the page scrolling under a still pointer sends it moves too, which would mark what lies under it.
+let pointerAt = null;
+els.pages.addEventListener('mousemove', (e) => {
+  const still = pointerAt?.x === e.clientX && pointerAt?.y === e.clientY;
+  pointerAt = { x: e.clientX, y: e.clientY };
+  if (document.body.classList.contains('keys')) { if (still) return; document.body.classList.remove('keys'); }
+  sentencePick.follow(blockOf.get(e.target), e);
+});
 els.pages.addEventListener('dblclick', (e) => {
   const b = blockOf.get(e.target);
   if (!b) return;
@@ -3074,8 +3094,12 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     speaker.toggle();
   } else if (e.key === 'Escape') { if (speaker.session) speaker.stop(); else if (speaker.recent) { select(null); renderPlayer(); } else chat.close(); }
-  else if (e.key === 'ArrowRight') speaker.skip(1);
-  else if (e.key === 'ArrowLeft') speaker.skip(-1);
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault(); // the arrows move the reading, not the page
+    document.body.classList.add('keys');
+    sentencePick.hide();
+    speaker.skip(e.key === 'ArrowRight' ? 1 : -1);
+  }
 });
 
 let dragDepth = 0;
