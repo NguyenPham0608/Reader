@@ -1,7 +1,7 @@
 {
   "app.js": {
-    "mtime": 1795759141.8316784,
-    "ast_hash": "10231e5aabb19080fddcdf65fd6d84cf",
+    "mtime": 1795760706.0299473,
+    "ast_hash": "0040fae3aca63d35f717f44ec8cb6e28",
     "semantic_hash": ""
   },
   "serve.py": {
@@ -262,6 +262,21 @@
   ".claude/settings.local.json": {
     "mtime": 1795756519.9203887,
     "ast_hash": "ce3b2b4942722e2537aa76c8346da64d",
+    "semantic_hash": ""
+  },
+  "tests/textlayout.test.mjs": {
+    "mtime": 1795760730.100786,
+    "ast_hash": "b349164385103d40788d6c02f757274c",
+    "semantic_hash": ""
+  },
+  "textlayout.js": {
+    "mtime": 1795760730.1006882,
+    "ast_hash": "6be044aa215131d4bd6c24fe0496bc25",
+    "semantic_hash": ""
+  },
+  "abbott2021.pdf": {
+    "mtime": 1795759731.2414992,
+    "ast_hash": "4ab58b37efbe6ab82870e258c38b03b6",
     "semantic_hash": ""
   }
 }

@@ -374,5 +374,9 @@
   "372": "Xdp",
   "373": "Xdc",
   "374": "Zpl",
-  "375": "TextLayer"
+  "375": "TextLayer",
+  "376": "Trace",
+  "377": "Transform",
+  "378": "ViewerPreferences",
+  "379": "Xsl"
 }

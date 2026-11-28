@@ -1567,7 +1567,7 @@
       "label": "hasFiles()",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3123",
+      "source_location": "L3133",
       "_origin": "ast",
       "id": "app_hasfiles",
       "community": 37,
@@ -1577,7 +1577,7 @@
       "label": "aiReady",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3145",
+      "source_location": "L3155",
       "_origin": "ast",
       "id": "app_aiready",
       "community": 37,
@@ -1587,7 +1587,7 @@
       "label": "linked",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3156",
+      "source_location": "L3166",
       "_origin": "ast",
       "id": "app_linked",
       "community": 37,
@@ -1597,7 +1597,7 @@
       "label": "hostState()",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3164",
+      "source_location": "L3174",
       "_origin": "ast",
       "id": "app_hoststate",
       "community": 86,
@@ -1607,7 +1607,7 @@
       "label": "tellHost()",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3180",
+      "source_location": "L3190",
       "_origin": "ast",
       "id": "app_tellhost",
       "community": 68,
@@ -1617,7 +1617,7 @@
       "label": "MENUS",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3189",
+      "source_location": "L3199",
       "_origin": "ast",
       "id": "app_menus",
       "community": 37,
@@ -1627,7 +1627,7 @@
       "label": "control",
       "file_type": "code",
       "source_file": "app.js",
-      "source_location": "L3191",
+      "source_location": "L3201",
       "_origin": "ast",
       "id": "app_control",
       "community": 37,
@@ -3900,7 +3900,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_i",
-      "community": 36,
+      "community": 5,
       "norm_label": "i"
     },
     {
@@ -4350,7 +4350,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_util_hexnums",
-      "community": 50,
+      "community": 89,
       "norm_label": ".hexnums()"
     },
     {
@@ -4770,7 +4770,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_computeluminance",
-      "community": 5,
+      "community": 66,
       "norm_label": "computeluminance()"
     },
     {
@@ -4980,7 +4980,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_xfalayer_setattributes",
-      "community": 36,
+      "community": 46,
       "norm_label": ".setattributes()"
     },
     {
@@ -5130,7 +5130,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_setlayerdimensions",
-      "community": 375,
+      "community": 28,
       "norm_label": "setlayerdimensions()"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_bindevents",
-      "community": 4,
+      "community": 28,
       "norm_label": "bindevents()"
     },
     {
@@ -6110,7 +6110,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditoruimanager_hascommentmanager",
-      "community": 71,
+      "community": 32,
       "norm_label": ".hascommentmanager()"
     },
     {
@@ -6150,7 +6150,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditoruimanager_updatepopupcolor",
-      "community": 214,
+      "community": 32,
       "norm_label": ".updatepopupcolor()"
     },
     {
@@ -6200,7 +6200,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditoruimanager_getcommentdialogelement",
-      "community": 71,
+      "community": 32,
       "norm_label": ".getcommentdialogelement()"
     },
     {
@@ -7180,7 +7180,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditoruimanager_enddragsession",
-      "community": 4,
+      "community": 7,
       "norm_label": ".enddragsession()"
     },
     {
@@ -7300,7 +7300,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditoruimanager_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment",
-      "community": 214,
+      "community": 32,
       "norm_label": "comment"
     },
     {
@@ -7510,7 +7510,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_constructor",
-      "community": 214,
+      "community": 32,
       "norm_label": ".constructor()"
     },
     {
@@ -7530,7 +7530,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_renderforstandalone",
-      "community": 71,
+      "community": 32,
       "norm_label": ".renderforstandalone()"
     },
     {
@@ -7550,7 +7550,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_onupdatedcolor",
-      "community": 214,
+      "community": 32,
       "norm_label": ".onupdatedcolor()"
     },
     {
@@ -7560,7 +7560,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_commentbuttonwidth",
-      "community": 214,
+      "community": 32,
       "norm_label": ".commentbuttonwidth()"
     },
     {
@@ -7570,7 +7570,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_commentpopuppositioninlayer",
-      "community": 214,
+      "community": 32,
       "norm_label": ".commentpopuppositioninlayer()"
     },
     {
@@ -7580,7 +7580,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_hasdefaultpopupposition",
-      "community": 214,
+      "community": 32,
       "norm_label": ".hasdefaultpopupposition()"
     },
     {
@@ -7590,7 +7590,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_removestandalonecommentbutton",
-      "community": 214,
+      "community": 32,
       "norm_label": ".removestandalonecommentbutton()"
     },
     {
@@ -7600,7 +7600,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_removetoolbarcommentbutton",
-      "community": 214,
+      "community": 32,
       "norm_label": ".removetoolbarcommentbutton()"
     },
     {
@@ -7610,7 +7610,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_setcommentbuttonstates",
-      "community": 214,
+      "community": 32,
       "norm_label": ".setcommentbuttonstates()"
     },
     {
@@ -7620,7 +7620,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_w",
-      "community": 71,
+      "community": 32,
       "norm_label": ".#w()"
     },
     {
@@ -7630,7 +7630,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_edit",
-      "community": 7,
+      "community": 32,
       "norm_label": ".edit()"
     },
     {
@@ -7640,7 +7640,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_finish",
-      "community": 214,
+      "community": 32,
       "norm_label": ".finish()"
     },
     {
@@ -7650,7 +7650,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_isdeleted",
-      "community": 214,
+      "community": 32,
       "norm_label": ".isdeleted()"
     },
     {
@@ -7660,7 +7660,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_isempty",
-      "community": 214,
+      "community": 32,
       "norm_label": ".isempty()"
     },
     {
@@ -7670,7 +7670,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_hasbeenedited",
-      "community": 214,
+      "community": 32,
       "norm_label": ".hasbeenedited()"
     },
     {
@@ -7680,7 +7680,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_serialize",
-      "community": 214,
+      "community": 32,
       "norm_label": ".serialize()"
     },
     {
@@ -7690,7 +7690,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_data",
-      "community": 214,
+      "community": 32,
       "norm_label": ".data()"
     },
     {
@@ -7700,7 +7700,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_restoredata",
-      "community": 214,
+      "community": 32,
       "norm_label": ".restoredata()"
     },
     {
@@ -7710,7 +7710,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_setinitialtext",
-      "community": 214,
+      "community": 32,
       "norm_label": ".setinitialtext()"
     },
     {
@@ -7720,7 +7720,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_shown",
-      "community": 214,
+      "community": 32,
       "norm_label": ".shown()"
     },
     {
@@ -7730,7 +7730,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_comment_destroy",
-      "community": 214,
+      "community": 32,
       "norm_label": ".destroy()"
     },
     {
@@ -8190,7 +8190,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_moveafterpaste",
-      "community": 4,
+      "community": 28,
       "norm_label": "._moveafterpaste()"
     },
     {
@@ -8230,7 +8230,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_translationdone",
-      "community": 4,
+      "community": 41,
       "norm_label": ".translationdone()"
     },
     {
@@ -8410,7 +8410,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_yi",
-      "community": 71,
+      "community": 4,
       "norm_label": ".#yi()"
     },
     {
@@ -8840,7 +8840,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_pointerdown",
-      "community": 41,
+      "community": 4,
       "norm_label": ".pointerdown()"
     },
     {
@@ -8850,7 +8850,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_pi",
-      "community": 41,
+      "community": 4,
       "norm_label": ".#pi()"
     },
     {
@@ -8900,7 +8900,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_setparentandposition",
-      "community": 4,
+      "community": 7,
       "norm_label": "._setparentandposition()"
     },
     {
@@ -8930,7 +8930,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_getpdfrect",
-      "community": 28,
+      "community": 18,
       "norm_label": ".getpdfrect()"
     },
     {
@@ -8960,7 +8960,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_getdata",
-      "community": 28,
+      "community": 18,
       "norm_label": ".getdata()"
     },
     {
@@ -9110,7 +9110,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_serialize",
-      "community": 28,
+      "community": 18,
       "norm_label": ".serialize()"
     },
     {
@@ -9160,7 +9160,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_makeresizable",
-      "community": 71,
+      "community": 4,
       "norm_label": ".makeresizable()"
     },
     {
@@ -9320,7 +9320,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_select",
-      "community": 71,
+      "community": 4,
       "norm_label": ".select()"
     },
     {
@@ -9540,7 +9540,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationeditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -9900,7 +9900,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_loopbackport",
-      "community": 99,
+      "community": 5,
       "norm_label": "loopbackport"
     },
     {
@@ -9930,7 +9930,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_loopbackport_removeeventlistener",
-      "community": 36,
+      "community": 5,
       "norm_label": ".removeeventlistener()"
     },
     {
@@ -9940,7 +9940,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_loopbackport_terminate",
-      "community": 99,
+      "community": 5,
       "norm_label": ".terminate()"
     },
     {
@@ -9980,7 +9980,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_stattimer_tostring",
-      "community": 50,
+      "community": 89,
       "norm_label": ".tostring()"
     },
     {
@@ -11650,7 +11650,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_canvasimagestracker",
-      "community": 5,
+      "community": 214,
       "norm_label": "canvasimagestracker"
     },
     {
@@ -11660,7 +11660,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_canvasimagestracker_constructor",
-      "community": 5,
+      "community": 214,
       "norm_label": ".constructor()"
     },
     {
@@ -11670,7 +11670,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_canvasimagestracker_record",
-      "community": 5,
+      "community": 214,
       "norm_label": ".record()"
     },
     {
@@ -11680,7 +11680,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_canvasimagestracker_take",
-      "community": 5,
+      "community": 214,
       "norm_label": ".take()"
     },
     {
@@ -15030,7 +15030,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_globalworkeroptions",
-      "community": 5,
+      "community": 210,
       "norm_label": "globalworkeroptions"
     },
     {
@@ -15040,7 +15040,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_globalworkeroptions_rendererports",
-      "community": 5,
+      "community": 210,
       "norm_label": ".rendererports()"
     },
     {
@@ -15050,7 +15050,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_globalworkeroptions_renderersrc",
-      "community": 5,
+      "community": 210,
       "norm_label": ".renderersrc()"
     },
     {
@@ -15060,7 +15060,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_globalworkeroptions_workerport",
-      "community": 5,
+      "community": 210,
       "norm_label": ".workerport()"
     },
     {
@@ -15070,7 +15070,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_globalworkeroptions_workersrc",
-      "community": 5,
+      "community": 210,
       "norm_label": ".workersrc()"
     },
     {
@@ -15590,7 +15590,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_patterninfo",
-      "community": 50,
+      "community": 89,
       "norm_label": "patterninfo"
     },
     {
@@ -15600,7 +15600,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_patterninfo_constructor",
-      "community": 50,
+      "community": 89,
       "norm_label": ".constructor()"
     },
     {
@@ -15610,7 +15610,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_patterninfo_getir",
-      "community": 50,
+      "community": 89,
       "norm_label": ".getir()"
     },
     {
@@ -16470,7 +16470,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer",
-      "community": 375,
+      "community": 28,
       "norm_label": "textlayer"
     },
     {
@@ -16480,7 +16480,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_constructor",
-      "community": 375,
+      "community": 28,
       "norm_label": ".constructor()"
     },
     {
@@ -16490,7 +16490,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_fontfamilymap",
-      "community": 375,
+      "community": 28,
       "norm_label": ".fontfamilymap()"
     },
     {
@@ -16500,7 +16500,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_render",
-      "community": 375,
+      "community": 28,
       "norm_label": ".render()"
     },
     {
@@ -16510,7 +16510,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_update",
-      "community": 375,
+      "community": 28,
       "norm_label": ".update()"
     },
     {
@@ -16520,7 +16520,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_cancel",
-      "community": 375,
+      "community": 28,
       "norm_label": ".cancel()"
     },
     {
@@ -16530,7 +16530,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_textdivs",
-      "community": 375,
+      "community": 28,
       "norm_label": ".textdivs()"
     },
     {
@@ -16540,7 +16540,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_textcontentitemsstr",
-      "community": 375,
+      "community": 28,
       "norm_label": ".textcontentitemsstr()"
     },
     {
@@ -16550,7 +16550,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_ea",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#ea()"
     },
     {
@@ -16560,7 +16560,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_ta",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#ta()"
     },
     {
@@ -16570,7 +16570,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_a",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#_a()"
     },
     {
@@ -16590,7 +16590,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_sa",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#sa()"
     },
     {
@@ -16600,7 +16600,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_pa",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#pa()"
     },
     {
@@ -16610,7 +16610,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_ma",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#ma()"
     },
     {
@@ -16620,7 +16620,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_ca",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#ca()"
     },
     {
@@ -16630,7 +16630,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_textlayer_ka",
-      "community": 375,
+      "community": 28,
       "norm_label": ".#ka()"
     },
     {
@@ -16650,7 +16650,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_pdfdocumentloadingtask",
-      "community": 5,
+      "community": 266,
       "norm_label": "pdfdocumentloadingtask"
     },
     {
@@ -16660,7 +16660,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_pdfdocumentloadingtask_promise",
-      "community": 5,
+      "community": 266,
       "norm_label": ".promise()"
     },
     {
@@ -16670,7 +16670,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_pdfdocumentloadingtask_destroy",
-      "community": 5,
+      "community": 266,
       "norm_label": ".destroy()"
     },
     {
@@ -16680,7 +16680,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_pdfdocumentloadingtask_getdata",
-      "community": 5,
+      "community": 266,
       "norm_label": ".getdata()"
     },
     {
@@ -18980,7 +18980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_annotationelement_hide",
-      "community": 28,
+      "community": 18,
       "norm_label": ".hide()"
     },
     {
@@ -19760,7 +19760,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_popupelement_editcomment",
-      "community": 7,
+      "community": 32,
       "norm_label": ".editcomment()"
     },
     {
@@ -19960,7 +19960,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_lineannotationelement",
-      "community": 18,
+      "community": 95,
       "norm_label": "lineannotationelement"
     },
     {
@@ -19970,7 +19970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_lineannotationelement_constructor",
-      "community": 18,
+      "community": 95,
       "norm_label": ".constructor()"
     },
     {
@@ -19980,7 +19980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_lineannotationelement_render",
-      "community": 18,
+      "community": 95,
       "norm_label": ".render()"
     },
     {
@@ -19990,7 +19990,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_lineannotationelement_getelementstotriggerpopup",
-      "community": 18,
+      "community": 95,
       "norm_label": ".getelementstotriggerpopup()"
     },
     {
@@ -20000,7 +20000,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_lineannotationelement_addhighlightarea",
-      "community": 18,
+      "community": 95,
       "norm_label": ".addhighlightarea()"
     },
     {
@@ -20210,7 +20210,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": "inkannotationelement"
     },
     {
@@ -20220,7 +20220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_constructor",
-      "community": 28,
+      "community": 18,
       "norm_label": ".constructor()"
     },
     {
@@ -20230,7 +20230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_cl",
-      "community": 28,
+      "community": 18,
       "norm_label": ".#cl()"
     },
     {
@@ -20240,7 +20240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_render",
-      "community": 28,
+      "community": 18,
       "norm_label": ".render()"
     },
     {
@@ -20250,7 +20250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_updateedited",
-      "community": 28,
+      "community": 18,
       "norm_label": ".updateedited()"
     },
     {
@@ -20260,7 +20260,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_getelementstotriggerpopup",
-      "community": 28,
+      "community": 18,
       "norm_label": ".getelementstotriggerpopup()"
     },
     {
@@ -20270,7 +20270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkannotationelement_addhighlightarea",
-      "community": 28,
+      "community": 18,
       "norm_label": ".addhighlightarea()"
     },
     {
@@ -21140,7 +21140,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_freetexteditor_getpdfrect",
-      "community": 28,
+      "community": 18,
       "norm_label": ".getpdfrect()"
     },
     {
@@ -21180,7 +21180,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_freetexteditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -21580,7 +21580,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_drawingeditor_ontranslated",
-      "community": 4,
+      "community": 41,
       "norm_label": "._ontranslated()"
     },
     {
@@ -21820,7 +21820,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_drawingeditor_render",
-      "community": 4,
+      "community": 28,
       "norm_label": ".render()"
     },
     {
@@ -21970,7 +21970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_drawingeditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -23230,7 +23230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_highlighteditor_getrect",
-      "community": 28,
+      "community": 18,
       "norm_label": ".getrect()"
     },
     {
@@ -23410,7 +23410,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_highlighteditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -24250,7 +24250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_inkeditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -24630,7 +24630,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_signatureeditor_render",
-      "community": 4,
+      "community": 28,
       "norm_label": ".render()"
     },
     {
@@ -25070,7 +25070,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_min_stampeditor_renderannotationelement",
-      "community": 28,
+      "community": 18,
       "norm_label": ".renderannotationelement()"
     },
     {
@@ -25960,7 +25960,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_t",
-      "community": 45,
+      "community": 6,
       "norm_label": "t"
     },
     {
@@ -26600,7 +26600,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_makeobj",
-      "community": 2,
+      "community": 121,
       "norm_label": "makeobj()"
     },
     {
@@ -26670,7 +26670,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_name",
-      "community": 295,
+      "community": 0,
       "norm_label": "name"
     },
     {
@@ -26680,7 +26680,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_name_constructor",
-      "community": 295,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -26970,7 +26970,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_dict_clone",
-      "community": 79,
+      "community": 6,
       "norm_label": ".clone()"
     },
     {
@@ -27210,7 +27210,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_refmap_values",
-      "community": 210,
+      "community": 79,
       "norm_label": ".values()"
     },
     {
@@ -27540,7 +27540,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_serializefontfamily",
-      "community": 2,
+      "community": 121,
       "norm_label": "serializefontfamily()"
     },
     {
@@ -27650,7 +27650,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_missingdataexception",
-      "community": 0,
+      "community": 286,
       "norm_label": "missingdataexception"
     },
     {
@@ -27660,7 +27660,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_missingdataexception_constructor",
-      "community": 0,
+      "community": 286,
       "norm_label": ".constructor()"
     },
     {
@@ -27850,7 +27850,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_escapepdfname",
-      "community": 17,
+      "community": 110,
       "norm_label": "escapepdfname()"
     },
     {
@@ -27930,7 +27930,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_validatefontname",
-      "community": 79,
+      "community": 17,
       "norm_label": "validatefontname()"
     },
     {
@@ -27950,7 +27950,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_validatecssfont",
-      "community": 79,
+      "community": 17,
       "norm_label": "validatecssfont()"
     },
     {
@@ -28110,7 +28110,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_isdefaultdecodehelper",
-      "community": 79,
+      "community": 110,
       "norm_label": "isdefaultdecodehelper()"
     },
     {
@@ -28210,7 +28210,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspace_isdefaultdecode",
-      "community": 79,
+      "community": 110,
       "norm_label": ".isdefaultdecode()"
     },
     {
@@ -28330,7 +28330,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_indexedcs_constructor",
-      "community": 90,
+      "community": 82,
       "norm_label": ".constructor()"
     },
     {
@@ -28360,7 +28360,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_indexedcs_isdefaultdecode",
-      "community": 79,
+      "community": 110,
       "norm_label": ".isdefaultdecode()"
     },
     {
@@ -29060,7 +29060,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_stringstream",
-      "community": 209,
+      "community": 16,
       "norm_label": "stringstream"
     },
     {
@@ -29070,7 +29070,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_stringstream_constructor",
-      "community": 209,
+      "community": 16,
       "norm_label": ".constructor()"
     },
     {
@@ -29080,7 +29080,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_nullstream",
-      "community": 298,
+      "community": 0,
       "norm_label": "nullstream"
     },
     {
@@ -29090,7 +29090,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_nullstream_constructor",
-      "community": 298,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -29610,7 +29610,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_decodestream_getbytes",
-      "community": 12,
+      "community": 110,
       "norm_label": ".getbytes()"
     },
     {
@@ -29630,7 +29630,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_decodestream_asyncgetbytesfromdecompressionstream",
-      "community": 12,
+      "community": 110,
       "norm_label": ".asyncgetbytesfromdecompressionstream()"
     },
     {
@@ -29720,7 +29720,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils",
-      "community": 20,
+      "community": 110,
       "norm_label": "colorspaceutils"
     },
     {
@@ -29730,7 +29730,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_parse",
-      "community": 20,
+      "community": 110,
       "norm_label": ".parse()"
     },
     {
@@ -29740,7 +29740,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_l",
-      "community": 20,
+      "community": 110,
       "norm_label": ".#l()"
     },
     {
@@ -29750,7 +29750,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_gray",
-      "community": 20,
+      "community": 110,
       "norm_label": ".gray()"
     },
     {
@@ -29760,7 +29760,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_rgb",
-      "community": 20,
+      "community": 110,
       "norm_label": ".rgb()"
     },
     {
@@ -29770,7 +29770,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_rgba",
-      "community": 20,
+      "community": 110,
       "norm_label": ".rgba()"
     },
     {
@@ -29780,7 +29780,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_colorspaceutils_cmyk",
-      "community": 20,
+      "community": 110,
       "norm_label": ".cmyk()"
     },
     {
@@ -29790,7 +29790,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jpegerror",
-      "community": 282,
+      "community": 0,
       "norm_label": "jpegerror"
     },
     {
@@ -29800,7 +29800,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jpegerror_constructor",
-      "community": 282,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -30760,7 +30760,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream",
-      "community": 12,
+      "community": 110,
       "norm_label": "brotlistream"
     },
     {
@@ -30770,7 +30770,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream_constructor",
-      "community": 12,
+      "community": 110,
       "norm_label": ".constructor()"
     },
     {
@@ -30780,7 +30780,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream_readblock",
-      "community": 12,
+      "community": 110,
       "norm_label": ".readblock()"
     },
     {
@@ -30790,7 +30790,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream_getimagedata",
-      "community": 12,
+      "community": 110,
       "norm_label": ".getimagedata()"
     },
     {
@@ -30800,7 +30800,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream_asyncgetbytes",
-      "community": 12,
+      "community": 110,
       "norm_label": ".asyncgetbytes()"
     },
     {
@@ -30810,7 +30810,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_brotlistream_isasync",
-      "community": 12,
+      "community": 110,
       "norm_label": ".isasync()"
     },
     {
@@ -30820,7 +30820,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ga",
-      "community": 45,
+      "community": 6,
       "norm_label": "ga()"
     },
     {
@@ -30860,7 +30860,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_wasmimage_cleanup",
-      "community": 16,
+      "community": 79,
       "norm_label": ".cleanup()"
     },
     {
@@ -30880,7 +30880,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_wasmimage_ne",
-      "community": 79,
+      "community": 6,
       "norm_label": ".#ne()"
     },
     {
@@ -30890,7 +30890,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_wasmimage_se",
-      "community": 79,
+      "community": 6,
       "norm_label": ".#se()"
     },
     {
@@ -30900,7 +30900,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_wasmimage_re",
-      "community": 79,
+      "community": 6,
       "norm_label": ".#re()"
     },
     {
@@ -30910,7 +30910,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_wasmimage_getmodule",
-      "community": 108,
+      "community": 100,
       "norm_label": "._getmodule()"
     },
     {
@@ -30930,7 +30930,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jbig2error",
-      "community": 279,
+      "community": 0,
       "norm_label": "jbig2error"
     },
     {
@@ -30940,7 +30940,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jbig2error_constructor",
-      "community": 279,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -30950,7 +30950,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jbig2ccittfaximage",
-      "community": 108,
+      "community": 100,
       "norm_label": "jbig2ccittfaximage"
     },
     {
@@ -30960,7 +30960,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jbig2ccittfaximage_instance",
-      "community": 108,
+      "community": 100,
       "norm_label": ".instance()"
     },
     {
@@ -30970,7 +30970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jbig2ccittfaximage_decode",
-      "community": 108,
+      "community": 100,
       "norm_label": ".decode()"
     },
     {
@@ -30980,7 +30980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream",
-      "community": 108,
+      "community": 100,
       "norm_label": "ccittfaxstream"
     },
     {
@@ -30990,7 +30990,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream_constructor",
-      "community": 108,
+      "community": 100,
       "norm_label": ".constructor()"
     },
     {
@@ -31000,7 +31000,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream_bytes",
-      "community": 108,
+      "community": 100,
       "norm_label": ".bytes()"
     },
     {
@@ -31010,7 +31010,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream_isimagestream",
-      "community": 108,
+      "community": 100,
       "norm_label": ".isimagestream()"
     },
     {
@@ -31020,7 +31020,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream_isasyncdecoder",
-      "community": 108,
+      "community": 100,
       "norm_label": ".isasyncdecoder()"
     },
     {
@@ -31030,7 +31030,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ccittfaxstream_decodeimage",
-      "community": 108,
+      "community": 100,
       "norm_label": ".decodeimage()"
     },
     {
@@ -31080,7 +31080,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_flatestream_getimagedata",
-      "community": 12,
+      "community": 110,
       "norm_label": ".getimagedata()"
     },
     {
@@ -31090,7 +31090,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_flatestream_asyncgetbytes",
-      "community": 12,
+      "community": 110,
       "norm_label": ".asyncgetbytes()"
     },
     {
@@ -31250,7 +31250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_za",
-      "community": 45,
+      "community": 6,
       "norm_label": "za()"
     },
     {
@@ -31260,7 +31260,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jpxerror",
-      "community": 0,
+      "community": 279,
       "norm_label": "jpxerror"
     },
     {
@@ -31270,7 +31270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jpxerror_constructor",
-      "community": 0,
+      "community": 279,
       "norm_label": ".constructor()"
     },
     {
@@ -31300,7 +31300,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jpximage_decode",
-      "community": 108,
+      "community": 100,
       "norm_label": ".decode()"
     },
     {
@@ -31540,7 +31540,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_parser_shift",
-      "community": 45,
+      "community": 6,
       "norm_label": ".shift()"
     },
     {
@@ -31550,7 +31550,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_parser_tryshift",
-      "community": 45,
+      "community": 6,
       "norm_label": ".tryshift()"
     },
     {
@@ -31560,7 +31560,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_parser_getobj",
-      "community": 45,
+      "community": 6,
       "norm_label": ".getobj()"
     },
     {
@@ -31660,7 +31660,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_parser_makestream",
-      "community": 45,
+      "community": 6,
       "norm_label": ".makestream()"
     },
     {
@@ -32730,7 +32730,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_cffparser_parseindex",
-      "community": 121,
+      "community": 79,
       "norm_label": ".parseindex()"
     },
     {
@@ -32880,7 +32880,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_cff_duplicatefirstglyph",
-      "community": 121,
+      "community": 79,
       "norm_label": ".duplicatefirstglyph()"
     },
     {
@@ -35060,7 +35060,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_adjustmapping",
-      "community": 45,
+      "community": 6,
       "norm_label": "adjustmapping()"
     },
     {
@@ -36040,7 +36040,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psnode",
-      "community": 332,
+      "community": 0,
       "norm_label": "psnode"
     },
     {
@@ -36050,7 +36050,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psnode_constructor",
-      "community": 332,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -36060,7 +36060,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psprogram",
-      "community": 0,
+      "community": 337,
       "norm_label": "psprogram"
     },
     {
@@ -36070,7 +36070,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psprogram_constructor",
-      "community": 0,
+      "community": 337,
       "norm_label": ".constructor()"
     },
     {
@@ -36220,7 +36220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psunarynode",
-      "community": 0,
+      "community": 375,
       "norm_label": "psunarynode"
     },
     {
@@ -36230,7 +36230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psunarynode_constructor",
-      "community": 0,
+      "community": 375,
       "norm_label": ".constructor()"
     },
     {
@@ -36240,7 +36240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psbinarynode",
-      "community": 0,
+      "community": 332,
       "norm_label": "psbinarynode"
     },
     {
@@ -36250,7 +36250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psbinarynode_constructor",
-      "community": 0,
+      "community": 332,
       "norm_label": ".constructor()"
     },
     {
@@ -36260,7 +36260,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psternarynode",
-      "community": 337,
+      "community": 0,
       "norm_label": "psternarynode"
     },
     {
@@ -36270,7 +36270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_psternarynode_constructor",
-      "community": 337,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -37010,7 +37010,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_baselocalcache_getbyref",
-      "community": 20,
+      "community": 110,
       "norm_label": ".getbyref()"
     },
     {
@@ -37050,7 +37050,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_localcolorspacecache",
-      "community": 285,
+      "community": 0,
       "norm_label": "localcolorspacecache"
     },
     {
@@ -37060,7 +37060,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_localcolorspacecache_set",
-      "community": 285,
+      "community": 0,
       "norm_label": ".set()"
     },
     {
@@ -37750,7 +37750,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_getfamilyname",
-      "community": 79,
+      "community": 110,
       "norm_label": "getfamilyname()"
     },
     {
@@ -37760,7 +37760,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_generatefont",
-      "community": 79,
+      "community": 110,
       "norm_label": "generatefont()"
     },
     {
@@ -37770,7 +37770,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_getfontsubstitution",
-      "community": 79,
+      "community": 110,
       "norm_label": "getfontsubstitution()"
     },
     {
@@ -37780,7 +37780,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_murmurhash3_64",
-      "community": 121,
+      "community": 17,
       "norm_label": "murmurhash3_64"
     },
     {
@@ -37790,7 +37790,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_murmurhash3_64_constructor",
-      "community": 121,
+      "community": 17,
       "norm_label": ".constructor()"
     },
     {
@@ -37800,7 +37800,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_murmurhash3_64_update",
-      "community": 121,
+      "community": 17,
       "norm_label": ".update()"
     },
     {
@@ -37810,7 +37810,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_murmurhash3_64_hexdigest",
-      "community": 121,
+      "community": 17,
       "norm_label": ".hexdigest()"
     },
     {
@@ -37860,7 +37860,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfimage_constructor",
-      "community": 79,
+      "community": 110,
       "norm_label": ".constructor()"
     },
     {
@@ -38080,7 +38080,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_timeslotmanager",
-      "community": 12,
+      "community": 110,
       "norm_label": "timeslotmanager"
     },
     {
@@ -38090,7 +38090,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_timeslotmanager_constructor",
-      "community": 12,
+      "community": 110,
       "norm_label": ".constructor()"
     },
     {
@@ -38100,7 +38100,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_timeslotmanager_check",
-      "community": 12,
+      "community": 110,
       "norm_label": ".check()"
     },
     {
@@ -38110,7 +38110,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_timeslotmanager_reset",
-      "community": 12,
+      "community": 110,
       "norm_label": ".reset()"
     },
     {
@@ -38490,7 +38490,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_partialevaluator_preevaluatefont",
-      "community": 121,
+      "community": 17,
       "norm_label": ".preevaluatefont()"
     },
     {
@@ -38550,7 +38550,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_translatedfont_send",
-      "community": 12,
+      "community": 79,
       "norm_label": ".send()"
     },
     {
@@ -38760,7 +38760,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor",
-      "community": 45,
+      "community": 20,
       "norm_label": "evaluatorpreprocessor"
     },
     {
@@ -38770,7 +38770,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor_opmap",
-      "community": 45,
+      "community": 20,
       "norm_label": ".opmap()"
     },
     {
@@ -38780,7 +38780,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor_constructor",
-      "community": 45,
+      "community": 20,
       "norm_label": ".constructor()"
     },
     {
@@ -38790,7 +38790,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor_savedstatesdepth",
-      "community": 45,
+      "community": 20,
       "norm_label": ".savedstatesdepth()"
     },
     {
@@ -38800,7 +38800,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor_read",
-      "community": 45,
+      "community": 20,
       "norm_label": ".read()"
     },
     {
@@ -38810,7 +38810,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_evaluatorpreprocessor_preprocesscommand",
-      "community": 45,
+      "community": 20,
       "norm_label": ".preprocesscommand()"
     },
     {
@@ -39110,7 +39110,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_clearglobalcaches",
-      "community": 16,
+      "community": 79,
       "norm_label": "clearglobalcaches()"
     },
     {
@@ -39610,7 +39610,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot",
-      "community": 210,
+      "community": 113,
       "norm_label": "structtreeroot"
     },
     {
@@ -39650,7 +39650,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_ft",
-      "community": 210,
+      "community": 113,
       "norm_label": ".#ft()"
     },
     {
@@ -39660,7 +39660,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_addannotationidtopage",
-      "community": 210,
+      "community": 113,
       "norm_label": ".addannotationidtopage()"
     },
     {
@@ -39670,7 +39670,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_cancreatestructuretree",
-      "community": 210,
+      "community": 79,
       "norm_label": ".cancreatestructuretree()"
     },
     {
@@ -39680,7 +39680,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_createstructuretree",
-      "community": 210,
+      "community": 113,
       "norm_label": ".createstructuretree()"
     },
     {
@@ -39690,7 +39690,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_canupdatestructtree",
-      "community": 210,
+      "community": 79,
       "norm_label": ".canupdatestructtree()"
     },
     {
@@ -39700,7 +39700,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_updatestructuretree",
-      "community": 210,
+      "community": 113,
       "norm_label": ".updatestructuretree()"
     },
     {
@@ -39710,7 +39710,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_tt",
-      "community": 210,
+      "community": 113,
       "norm_label": ".#tt()"
     },
     {
@@ -39720,7 +39720,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_dt",
-      "community": 210,
+      "community": 113,
       "norm_label": ".#dt()"
     },
     {
@@ -39740,7 +39740,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structtreeroot_ot",
-      "community": 210,
+      "community": 113,
       "norm_label": ".#ot()"
     },
     {
@@ -39750,7 +39750,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode",
-      "community": 15,
+      "community": 17,
       "norm_label": "structelementnode"
     },
     {
@@ -39760,7 +39760,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_constructor",
-      "community": 15,
+      "community": 17,
       "norm_label": ".constructor()"
     },
     {
@@ -39770,7 +39770,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_role",
-      "community": 15,
+      "community": 17,
       "norm_label": ".role()"
     },
     {
@@ -39790,7 +39790,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_mt",
-      "community": 15,
+      "community": 17,
       "norm_label": ".#mt()"
     },
     {
@@ -39800,7 +39800,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_attributes",
-      "community": 15,
+      "community": 17,
       "norm_label": ".attributes()"
     },
     {
@@ -39820,7 +39820,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_parsekids",
-      "community": 15,
+      "community": 17,
       "norm_label": ".parsekids()"
     },
     {
@@ -39830,7 +39830,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_structelementnode_parsekid",
-      "community": 15,
+      "community": 17,
       "norm_label": ".parsekid()"
     },
     {
@@ -40330,7 +40330,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_catalog_viewerpreferences",
-      "community": 79,
+      "community": 6,
       "norm_label": ".viewerpreferences()"
     },
     {
@@ -40410,7 +40410,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_catalog_cleanup",
-      "community": 16,
+      "community": 79,
       "norm_label": ".cleanup()"
     },
     {
@@ -40680,7 +40680,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ol",
-      "community": 0,
+      "community": 298,
       "norm_label": "ol"
     },
     {
@@ -41020,7 +41020,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_stripquotes",
-      "community": 2,
+      "community": 121,
       "norm_label": "stripquotes()"
     },
     {
@@ -41170,7 +41170,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder",
-      "community": 2,
+      "community": 121,
       "norm_label": "fontfinder"
     },
     {
@@ -41180,7 +41180,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder_constructor",
-      "community": 2,
+      "community": 121,
       "norm_label": ".constructor()"
     },
     {
@@ -41190,7 +41190,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder_add",
-      "community": 2,
+      "community": 121,
       "norm_label": ".add()"
     },
     {
@@ -41200,7 +41200,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder_addpdffont",
-      "community": 2,
+      "community": 121,
       "norm_label": ".addpdffont()"
     },
     {
@@ -41210,7 +41210,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder_getdefault",
-      "community": 2,
+      "community": 121,
       "norm_label": ".getdefault()"
     },
     {
@@ -41220,7 +41220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontfinder_find",
-      "community": 121,
+      "community": 15,
       "norm_label": ".find()"
     },
     {
@@ -41230,7 +41230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_selectfont",
-      "community": 2,
+      "community": 121,
       "norm_label": "selectfont()"
     },
     {
@@ -41240,7 +41240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontinfo",
-      "community": 2,
+      "community": 121,
       "norm_label": "fontinfo"
     },
     {
@@ -41250,7 +41250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontinfo_constructor",
-      "community": 2,
+      "community": 121,
       "norm_label": ".constructor()"
     },
     {
@@ -41260,7 +41260,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_fontinfo_defaultfont",
-      "community": 2,
+      "community": 121,
       "norm_label": ".defaultfont()"
     },
     {
@@ -41550,7 +41550,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfaobject_xl",
-      "community": 79,
+      "community": 6,
       "norm_label": ".[xl]()"
     },
     {
@@ -41870,7 +41870,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfaobject_af",
-      "community": 121,
+      "community": 79,
       "norm_label": ".[af]()"
     },
     {
@@ -42030,7 +42030,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfaobjectarray_clear",
-      "community": 16,
+      "community": 79,
       "norm_label": ".clear()"
     },
     {
@@ -42420,7 +42420,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_option10",
-      "community": 0,
+      "community": 299,
       "norm_label": "option10"
     },
     {
@@ -42430,7 +42430,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_option10_constructor",
-      "community": 0,
+      "community": 299,
       "norm_label": ".constructor()"
     },
     {
@@ -42590,7 +42590,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_setfontfamily",
-      "community": 2,
+      "community": 121,
       "norm_label": "setfontfamily()"
     },
     {
@@ -43350,7 +43350,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_choicelist",
-      "community": 34,
+      "community": 24,
       "norm_label": "choicelist"
     },
     {
@@ -43360,7 +43360,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_choicelist_constructor",
-      "community": 34,
+      "community": 24,
       "norm_label": ".constructor()"
     },
     {
@@ -44440,7 +44440,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_image",
-      "community": 34,
+      "community": 8,
       "norm_label": "image"
     },
     {
@@ -44450,7 +44450,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_image_constructor",
-      "community": 34,
+      "community": 8,
       "norm_label": ".constructor()"
     },
     {
@@ -44890,7 +44890,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_oid",
-      "community": 0,
+      "community": 297,
       "norm_label": "oid"
     },
     {
@@ -44900,7 +44900,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_oid_constructor",
-      "community": 0,
+      "community": 297,
       "norm_label": ".constructor()"
     },
     {
@@ -45140,7 +45140,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_picture",
-      "community": 0,
+      "community": 311,
       "norm_label": "picture"
     },
     {
@@ -45150,7 +45150,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_picture_constructor",
-      "community": 0,
+      "community": 311,
       "norm_label": ".constructor()"
     },
     {
@@ -46780,7 +46780,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_templatenamespace_items",
-      "community": 210,
+      "community": 113,
       "norm_label": ".items()"
     },
     {
@@ -47360,7 +47360,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_binder_bind",
-      "community": 45,
+      "community": 6,
       "norm_label": ".bind()"
     },
     {
@@ -47490,7 +47490,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_datahandler_serialize",
-      "community": 210,
+      "community": 79,
       "norm_label": ".serialize()"
     },
     {
@@ -48530,7 +48530,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_groupparent",
-      "community": 267,
+      "community": 0,
       "norm_label": "groupparent"
     },
     {
@@ -48540,7 +48540,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_groupparent_constructor",
-      "community": 267,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -48650,7 +48650,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jog",
-      "community": 0,
+      "community": 267,
       "norm_label": "jog"
     },
     {
@@ -48660,7 +48660,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_jog_constructor",
-      "community": 0,
+      "community": 267,
       "norm_label": ".constructor()"
     },
     {
@@ -48730,7 +48730,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_linearized",
-      "community": 0,
+      "community": 285,
       "norm_label": "linearized"
     },
     {
@@ -48740,7 +48740,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_linearized_constructor",
-      "community": 0,
+      "community": 285,
       "norm_label": ".constructor()"
     },
     {
@@ -48770,7 +48770,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_localeset",
-      "community": 286,
+      "community": 0,
       "norm_label": "localeset"
     },
     {
@@ -48780,7 +48780,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_localeset_constructor",
-      "community": 286,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -48810,7 +48810,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_mapelement",
-      "community": 287,
+      "community": 0,
       "norm_label": "mapelement"
     },
     {
@@ -48820,7 +48820,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_mapelement_constructor",
-      "community": 287,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -48910,7 +48910,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_modifyannots",
-      "community": 291,
+      "community": 0,
       "norm_label": "modifyannots"
     },
     {
@@ -48920,7 +48920,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_modifyannots_constructor",
-      "community": 291,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -48950,7 +48950,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_nameattr",
-      "community": 0,
+      "community": 288,
       "norm_label": "nameattr"
     },
     {
@@ -48960,7 +48960,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_nameattr_constructor",
-      "community": 0,
+      "community": 288,
       "norm_label": ".constructor()"
     },
     {
@@ -48970,7 +48970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_neverembed",
-      "community": 297,
+      "community": 0,
       "norm_label": "neverembed"
     },
     {
@@ -48980,7 +48980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_neverembed_constructor",
-      "community": 297,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49210,7 +49210,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_paginationoverride",
-      "community": 300,
+      "community": 0,
       "norm_label": "paginationoverride"
     },
     {
@@ -49220,7 +49220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_paginationoverride_constructor",
-      "community": 300,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49230,7 +49230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_part",
-      "community": 0,
+      "community": 300,
       "norm_label": "part"
     },
     {
@@ -49240,7 +49240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_part_constructor",
-      "community": 0,
+      "community": 300,
       "norm_label": ".constructor()"
     },
     {
@@ -49270,7 +49270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdf",
-      "community": 0,
+      "community": 308,
       "norm_label": "pdf"
     },
     {
@@ -49280,7 +49280,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdf_constructor",
-      "community": 0,
+      "community": 308,
       "norm_label": ".constructor()"
     },
     {
@@ -49330,7 +49330,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_picktraybypdfsize",
-      "community": 308,
+      "community": 0,
       "norm_label": "picktraybypdfsize"
     },
     {
@@ -49340,7 +49340,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_picktraybypdfsize_constructor",
-      "community": 308,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49370,7 +49370,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_plaintextmetadata",
-      "community": 311,
+      "community": 0,
       "norm_label": "plaintextmetadata"
     },
     {
@@ -49380,7 +49380,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_plaintextmetadata_constructor",
-      "community": 311,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49390,7 +49390,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_presence",
-      "community": 0,
+      "community": 316,
       "norm_label": "presence"
     },
     {
@@ -49400,7 +49400,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_presence_constructor",
-      "community": 0,
+      "community": 316,
       "norm_label": ".constructor()"
     },
     {
@@ -49410,7 +49410,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_present",
-      "community": 316,
+      "community": 0,
       "norm_label": "present"
     },
     {
@@ -49420,7 +49420,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_present_constructor",
-      "community": 316,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49430,7 +49430,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_print",
-      "community": 0,
+      "community": 320,
       "norm_label": "print"
     },
     {
@@ -49440,7 +49440,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_print_constructor",
-      "community": 0,
+      "community": 320,
       "norm_label": ".constructor()"
     },
     {
@@ -49450,7 +49450,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_printhighquality",
-      "community": 320,
+      "community": 0,
       "norm_label": "printhighquality"
     },
     {
@@ -49460,7 +49460,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_printhighquality_constructor",
-      "community": 320,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49470,7 +49470,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_printscaling",
-      "community": 0,
+      "community": 322,
       "norm_label": "printscaling"
     },
     {
@@ -49480,7 +49480,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_printscaling_constructor",
-      "community": 0,
+      "community": 322,
       "norm_label": ".constructor()"
     },
     {
@@ -49530,7 +49530,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ps",
-      "community": 322,
+      "community": 0,
       "norm_label": "ps"
     },
     {
@@ -49540,7 +49540,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ps_constructor",
-      "community": 322,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -49710,7 +49710,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_config_script",
-      "community": 266,
+      "community": 0,
       "norm_label": "config_script"
     },
     {
@@ -49720,7 +49720,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_config_script_constructor",
-      "community": 266,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -51860,7 +51860,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_operation",
-      "community": 299,
+      "community": 0,
       "norm_label": "operation"
     },
     {
@@ -51870,7 +51870,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_operation_constructor",
-      "community": 299,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -52540,7 +52540,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_meridiemnames",
-      "community": 288,
+      "community": 0,
       "norm_label": "meridiemnames"
     },
     {
@@ -52550,7 +52550,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_meridiemnames_constructor",
-      "community": 288,
+      "community": 0,
       "norm_label": ".constructor()"
     },
     {
@@ -52560,7 +52560,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_month",
-      "community": 0,
+      "community": 287,
       "norm_label": "month"
     },
     {
@@ -52570,7 +52570,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_month_constructor",
-      "community": 0,
+      "community": 287,
       "norm_label": ".constructor()"
     },
     {
@@ -52620,7 +52620,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_numberpatterns",
-      "community": 0,
+      "community": 291,
       "norm_label": "numberpatterns"
     },
     {
@@ -52630,7 +52630,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_numberpatterns_constructor",
-      "community": 0,
+      "community": 291,
       "norm_label": ".constructor()"
     },
     {
@@ -52660,7 +52660,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_numbersymbols",
-      "community": 0,
+      "community": 295,
       "norm_label": "numbersymbols"
     },
     {
@@ -52670,7 +52670,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_numbersymbols_constructor",
-      "community": 0,
+      "community": 295,
       "norm_label": ".constructor()"
     },
     {
@@ -53250,7 +53250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xhtmlobject_zo",
-      "community": 79,
+      "community": 6,
       "norm_label": ".[zo]()"
     },
     {
@@ -53480,7 +53480,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_li",
-      "community": 0,
+      "community": 282,
       "norm_label": "li"
     },
     {
@@ -53490,7 +53490,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_li_constructor",
-      "community": 0,
+      "community": 282,
       "norm_label": ".constructor()"
     },
     {
@@ -53500,7 +53500,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ol_constructor",
-      "community": 0,
+      "community": 298,
       "norm_label": ".constructor()"
     },
     {
@@ -53640,7 +53640,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xhtmlnamespace_a",
-      "community": 79,
+      "community": 6,
       "norm_label": ".a()"
     },
     {
@@ -54080,7 +54080,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfafactory_constructor",
-      "community": 45,
+      "community": 6,
       "norm_label": ".constructor()"
     },
     {
@@ -54150,7 +54150,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfafactory_setfonts",
-      "community": 2,
+      "community": 121,
       "norm_label": ".setfonts()"
     },
     {
@@ -54190,7 +54190,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xfafactory_createdocument",
-      "community": 45,
+      "community": 6,
       "norm_label": "._createdocument()"
     },
     {
@@ -54210,7 +54210,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory",
-      "community": 210,
+      "community": 79,
       "norm_label": "annotationfactory"
     },
     {
@@ -54220,7 +54220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory_createglobals",
-      "community": 210,
+      "community": 79,
       "norm_label": ".createglobals()"
     },
     {
@@ -54230,7 +54230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory_create",
-      "community": 210,
+      "community": 79,
       "norm_label": ".create()"
     },
     {
@@ -54240,7 +54240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory_getpageindex",
-      "community": 210,
+      "community": 79,
       "norm_label": "._getpageindex()"
     },
     {
@@ -54250,7 +54250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory_generateimages",
-      "community": 210,
+      "community": 79,
       "norm_label": ".generateimages()"
     },
     {
@@ -54260,7 +54260,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotationfactory_getprintdata",
-      "community": 210,
+      "community": 79,
       "norm_label": ".getprintdata()"
     },
     {
@@ -54690,7 +54690,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_annotation_reset",
-      "community": 12,
+      "community": 110,
       "norm_label": ".reset()"
     },
     {
@@ -56400,7 +56400,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_word64_add",
-      "community": 121,
+      "community": 79,
       "norm_label": ".add()"
     },
     {
@@ -56640,7 +56640,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_decryptstream_getoriginalstream",
-      "community": 12,
+      "community": 110,
       "norm_label": ".getoriginalstream()"
     },
     {
@@ -57140,7 +57140,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_ciphertransformfactory_constructor",
-      "community": 17,
+      "community": 15,
       "norm_label": ".constructor()"
     },
     {
@@ -57530,7 +57530,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_page_getcontentstream",
-      "community": 12,
+      "community": 110,
       "norm_label": ".getcontentstream()"
     },
     {
@@ -57730,7 +57730,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_find",
-      "community": 2,
+      "community": 121,
       "norm_label": "find()"
     },
     {
@@ -58010,7 +58010,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfdocument_checkfirstpage",
-      "community": 210,
+      "community": 79,
       "norm_label": ".checkfirstpage()"
     },
     {
@@ -58020,7 +58020,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfdocument_checklastpage",
-      "community": 210,
+      "community": 79,
       "norm_label": ".checklastpage()"
     },
     {
@@ -58040,7 +58040,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfdocument_cleanup",
-      "community": 16,
+      "community": 79,
       "norm_label": ".cleanup()"
     },
     {
@@ -58130,7 +58130,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfdocument_hasjsactions",
-      "community": 210,
+      "community": 79,
       "norm_label": ".hasjsactions()"
     },
     {
@@ -58220,7 +58220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_basepdfmanager_ensuredoc",
-      "community": 210,
+      "community": 79,
       "norm_label": ".ensuredoc()"
     },
     {
@@ -58230,7 +58230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_basepdfmanager_ensurecatalog",
-      "community": 210,
+      "community": 79,
       "norm_label": ".ensurecatalog()"
     },
     {
@@ -58240,7 +58240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_basepdfmanager_initdocument",
-      "community": 210,
+      "community": 79,
       "norm_label": ".initdocument()"
     },
     {
@@ -58250,7 +58250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_basepdfmanager_getpage",
-      "community": 210,
+      "community": 79,
       "norm_label": ".getpage()"
     },
     {
@@ -58270,7 +58270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_basepdfmanager_cleanup",
-      "community": 210,
+      "community": 79,
       "norm_label": ".cleanup()"
     },
     {
@@ -58400,7 +58400,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_networkpdfmanager_ensure",
-      "community": 210,
+      "community": 79,
       "norm_label": ".ensure()"
     },
     {
@@ -58500,7 +58500,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_messagehandler_on",
-      "community": 210,
+      "community": 79,
       "norm_label": ".on()"
     },
     {
@@ -58510,7 +58510,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_messagehandler_send",
-      "community": 12,
+      "community": 79,
       "norm_label": ".send()"
     },
     {
@@ -58590,7 +58590,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_writeobject",
-      "community": 121,
+      "community": 110,
       "norm_label": "writeobject()"
     },
     {
@@ -58600,7 +58600,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_writedict",
-      "community": 17,
+      "community": 110,
       "norm_label": "writedict()"
     },
     {
@@ -58610,7 +58610,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_writevalue",
-      "community": 17,
+      "community": 110,
       "norm_label": "writevalue()"
     },
     {
@@ -58740,7 +58740,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_xrefwrapper_getnewtemporaryref",
-      "community": 210,
+      "community": 113,
       "norm_label": ".getnewtemporaryref()"
     },
     {
@@ -58800,7 +58800,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor",
-      "community": 121,
+      "community": 15,
       "norm_label": "pdfeditor"
     },
     {
@@ -58810,7 +58810,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_constructor",
-      "community": 121,
+      "community": 15,
       "norm_label": ".constructor()"
     },
     {
@@ -58830,7 +58830,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_newdict",
-      "community": 121,
+      "community": 15,
       "norm_label": ".newdict()"
     },
     {
@@ -58880,7 +58880,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_pn",
-      "community": 12,
+      "community": 110,
       "norm_label": ".#pn()"
     },
     {
@@ -58890,7 +58890,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_nn",
-      "community": 121,
+      "community": 16,
       "norm_label": ".#nn()"
     },
     {
@@ -58900,7 +58900,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_en",
-      "community": 121,
+      "community": 17,
       "norm_label": ".#en()"
     },
     {
@@ -58920,7 +58920,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_zn",
-      "community": 121,
+      "community": 16,
       "norm_label": ".#zn()"
     },
     {
@@ -58950,7 +58950,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_un",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#un()"
     },
     {
@@ -58960,7 +58960,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_wn",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#wn()"
     },
     {
@@ -58970,7 +58970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_extractpages",
-      "community": 121,
+      "community": 79,
       "norm_label": ".extractpages()"
     },
     {
@@ -58980,7 +58980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_xn",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#xn()"
     },
     {
@@ -58990,7 +58990,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_jn",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#jn()"
     },
     {
@@ -59000,7 +59000,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ts",
-      "community": 16,
+      "community": 79,
       "norm_label": ".#ts()"
     },
     {
@@ -59030,7 +59030,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_kn",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#kn()"
     },
     {
@@ -59060,7 +59060,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_gn",
-      "community": 121,
+      "community": 79,
       "norm_label": ".#gn()"
     },
     {
@@ -59070,7 +59070,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ls",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#ls()"
     },
     {
@@ -59080,7 +59080,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_fs",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#fs()"
     },
     {
@@ -59090,7 +59090,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ss",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#ss()"
     },
     {
@@ -59120,7 +59120,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ns",
-      "community": 121,
+      "community": 15,
       "norm_label": ".#ns()"
     },
     {
@@ -59130,7 +59130,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ps",
-      "community": 121,
+      "community": 15,
       "norm_label": ".#ps()"
     },
     {
@@ -59140,7 +59140,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_us",
-      "community": 121,
+      "community": 15,
       "norm_label": ".#us()"
     },
     {
@@ -59150,7 +59150,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ws",
-      "community": 121,
+      "community": 15,
       "norm_label": ".#ws()"
     },
     {
@@ -59160,7 +59160,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ms",
-      "community": 121,
+      "community": 15,
       "norm_label": ".#ms()"
     },
     {
@@ -59220,7 +59220,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_qn",
-      "community": 210,
+      "community": 79,
       "norm_label": ".#qn()"
     },
     {
@@ -59230,7 +59230,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_js",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#js()"
     },
     {
@@ -59240,7 +59240,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ks",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#ks()"
     },
     {
@@ -59250,7 +59250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_ys",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#ys()"
     },
     {
@@ -59270,7 +59270,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_qs",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#qs()"
     },
     {
@@ -59280,7 +59280,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_vs",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#vs()"
     },
     {
@@ -59290,7 +59290,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfeditor_xs",
-      "community": 121,
+      "community": 110,
       "norm_label": ".#xs()"
     },
     {
@@ -59510,7 +59510,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_pdfworkerstream",
-      "community": 79,
+      "community": 110,
       "norm_label": "pdfworkerstream"
     },
     {
@@ -59670,7 +59670,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_workermessagehandler",
-      "community": 210,
+      "community": 79,
       "norm_label": "workermessagehandler"
     },
     {
@@ -59680,7 +59680,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_workermessagehandler_setup",
-      "community": 210,
+      "community": 79,
       "norm_label": ".setup()"
     },
     {
@@ -59690,7 +59690,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_workermessagehandler_createdocumenthandler",
-      "community": 210,
+      "community": 79,
       "norm_label": ".createdocumenthandler()"
     },
     {
@@ -59700,7 +59700,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "vendor_pdfjs_pdf_worker_min_workermessagehandler_initializefromport",
-      "community": 210,
+      "community": 79,
       "norm_label": ".initializefromport()"
     },
     {
@@ -65099,7 +65099,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3145",
+      "source_location": "L3155",
       "weight": 1.0,
       "source": "app",
       "target": "app_aiready",
@@ -65339,7 +65339,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3191",
+      "source_location": "L3201",
       "weight": 1.0,
       "source": "app",
       "target": "app_control",
@@ -65489,7 +65489,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3123",
+      "source_location": "L3133",
       "weight": 1.0,
       "source": "app",
       "target": "app_hasfiles",
@@ -65529,7 +65529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3164",
+      "source_location": "L3174",
       "weight": 1.0,
       "source": "app",
       "target": "app_hoststate",
@@ -65589,7 +65589,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3156",
+      "source_location": "L3166",
       "weight": 1.0,
       "source": "app",
       "target": "app_linked",
@@ -65689,7 +65689,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3189",
+      "source_location": "L3199",
       "weight": 1.0,
       "source": "app",
       "target": "app_menus",
@@ -66380,7 +66380,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3180",
+      "source_location": "L3190",
       "weight": 1.0,
       "source": "app",
       "target": "app_tellhost",
@@ -66822,7 +66822,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "app.js",
-      "source_location": "L3165",
+      "source_location": "L3175",
       "weight": 1.0,
       "source": "app_hoststate",
       "target": "app_scopes"
@@ -66997,7 +66997,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3174",
+      "source_location": "L3184",
       "weight": 1.0,
       "source": "app_hoststate",
       "target": "app_languagename",
@@ -68603,7 +68603,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app.js",
-      "source_location": "L3184",
+      "source_location": "L3194",
       "weight": 1.0,
       "source": "app_tellhost",
       "target": "app_hoststate",
